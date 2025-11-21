@@ -157,21 +157,21 @@ export default function RegionsPage() {
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold gradient-text">局点版本视图</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl font-bold gradient-text">局点版本视图</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
             多版本线全网局点当前版本状态一览
           </p>
         </div>
         {versionLines.length > 0 && (
           <div className="text-right">
-            <p className="text-sm text-muted-foreground">活跃版本线</p>
+            <p className="text-xs text-muted-foreground">活跃版本线</p>
             <div className="flex gap-2 mt-1">
               {versionLines.map(vl => (
-                <Badge key={vl} variant="outline" className="font-mono">
+                <Badge key={vl} variant="outline" className="font-mono text-xs">
                   {vl}.x @ {baselines[vl]}
                 </Badge>
               ))}
@@ -182,8 +182,8 @@ export default function RegionsPage() {
 
       {/* Filters */}
       <Card className="glass">
-        <CardContent className="pt-6">
-          <div className="flex items-center gap-4">
+        <CardContent className="pt-4">
+          <div className="flex items-center gap-3">
             <Select value={areaFilter} onValueChange={setAreaFilter}>
               <SelectTrigger className="w-48">
                 <SelectValue placeholder="选择区域" />
@@ -210,21 +210,21 @@ export default function RegionsPage() {
             </Select>
 
             {/* Legend */}
-            <div className="flex-1 flex items-center justify-end gap-4 text-sm">
+            <div className="flex-1 flex items-center justify-end gap-3 text-xs">
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded bg-cyan-500"></div>
+                <div className="w-2 h-2 rounded bg-cyan-500"></div>
                 <span className="text-muted-foreground">25.8.x</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded bg-purple-500"></div>
+                <div className="w-2 h-2 rounded bg-purple-500"></div>
                 <span className="text-muted-foreground">25.10.x</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded bg-success"></div>
+                <div className="w-2 h-2 rounded bg-success"></div>
                 <span className="text-muted-foreground">已对齐</span>
               </div>
               <div className="flex items-center gap-1">
-                <div className="w-3 h-3 rounded bg-warning"></div>
+                <div className="w-2 h-2 rounded bg-warning"></div>
                 <span className="text-muted-foreground">落后</span>
               </div>
             </div>
@@ -235,15 +235,15 @@ export default function RegionsPage() {
       {/* Region Cards */}
       {Object.entries(groupedRegions).map(([area, areaRegions]) => (
         <div key={area}>
-          <h2 className="text-lg font-semibold mb-4 flex items-center gap-2">
-            <Map className="h-5 w-5 text-primary" />
+          <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+            <Map className="h-4 w-4 text-primary" />
             {areaNames[area] || area}
-            <span className="text-sm text-muted-foreground font-normal">
+            <span className="text-xs text-muted-foreground font-normal">
               ({areaRegions.length} 个局点)
             </span>
           </h2>
 
-          <div className="grid gap-4 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
             {areaRegions.map((region) => {
               const status = getVersionStatus(region)
               const config = statusConfig[status]
@@ -259,14 +259,14 @@ export default function RegionsPage() {
                     versionLineColor
                   )}
                 >
-                  <CardContent className="p-4">
-                    <div className="flex items-start justify-between mb-3">
+                  <CardContent className="p-3">
+                    <div className="flex items-start justify-between mb-2">
                       <div className="flex-1">
-                        <h3 className="font-medium truncate">{region.name}</h3>
+                        <h3 className="text-sm font-medium truncate">{region.name}</h3>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-1">
                         <StatusIcon className={cn(
-                          'h-4 w-4',
+                          'h-3 w-3',
                           status === 'aligned' && 'text-success',
                           status === 'behind_one' && 'text-warning',
                           status === 'behind_many' && 'text-destructive',
@@ -275,41 +275,41 @@ export default function RegionsPage() {
                         <Button
                           size="sm"
                           variant="ghost"
-                          className="h-6 w-6 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
+                          className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
                           onClick={() => handleEditRegion(region)}
                         >
-                          <Edit className="h-3 w-3" />
+                          <Edit className="h-2.5 w-2.5" />
                         </Button>
                       </div>
                     </div>
 
                     {region.currentVersion ? (
                       <>
-                        <p className="text-2xl font-mono font-bold text-primary mb-1">
+                        <p className="text-xl font-mono font-bold text-primary mb-1">
                           {region.currentVersion.plan.version}
                         </p>
                         {versionLine && baselines[versionLine] && (
-                          <p className="text-xs text-muted-foreground mb-2">
+                          <p className="text-[10px] text-muted-foreground mb-1.5">
                             目标: <span className="font-mono font-semibold">{baselines[versionLine]}</span>
                           </p>
                         )}
                         <div className="flex gap-1">
                           <Badge
                             variant={region.currentVersion.backendReady ? 'success' : 'outline'}
-                            className="text-[10px]"
+                            className="text-[9px] px-1.5 py-0"
                           >
                             BE {region.currentVersion.backendReady ? 'OK' : '-'}
                           </Badge>
                           <Badge
                             variant={region.currentVersion.frontendReady ? 'success' : 'outline'}
-                            className="text-[10px]"
+                            className="text-[9px] px-1.5 py-0"
                           >
                             FE {region.currentVersion.frontendReady ? 'OK' : '-'}
                           </Badge>
                         </div>
                       </>
                     ) : (
-                      <p className="text-muted-foreground text-sm">未设置版本</p>
+                      <p className="text-muted-foreground text-xs">未设置版本</p>
                     )}
                   </CardContent>
                 </Card>

@@ -176,12 +176,12 @@ export default function PlansPage() {
   }))
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold gradient-text">发布计划</h1>
-          <p className="text-muted-foreground mt-1">
+          <h1 className="text-2xl font-bold gradient-text">发布计划</h1>
+          <p className="text-sm text-muted-foreground mt-0.5">
             管理所有版本发布计划与交付套件
           </p>
         </div>
@@ -309,8 +309,8 @@ export default function PlansPage() {
 
       {/* Filters */}
       <Card className="glass">
-        <CardContent className="pt-6">
-          <div className="flex gap-4">
+        <CardContent className="pt-4">
+          <div className="flex gap-3">
             <div className="flex-1 relative">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
               <Input
@@ -353,30 +353,30 @@ export default function PlansPage() {
 
       {/* Plans List */}
       {loading ? (
-        <div className="text-center py-12 text-muted-foreground">加载中...</div>
+        <div className="text-center py-8 text-muted-foreground">加载中...</div>
       ) : filteredPlans.length === 0 ? (
-        <div className="text-center py-12 text-muted-foreground">
+        <div className="text-center py-8 text-muted-foreground">
           暂无发布计划
         </div>
       ) : (
-        <div className="space-y-4">
+        <div className="space-y-3">
           {filteredPlans.map((plan) => (
             <Card key={plan.id} className="glass hover:border-primary/50 transition-all group relative">
               <Link href={`/plans/${plan.id}`}>
-                <CardContent className="p-6 cursor-pointer">
+                <CardContent className="p-4 cursor-pointer">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-6">
-                      <div className="flex items-center gap-3">
-                        <Package className="h-5 w-5 text-primary" />
-                        <span className="text-xl font-mono font-bold text-primary">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Package className="h-4 w-4 text-primary" />
+                        <span className="text-lg font-mono font-bold text-primary">
                           {plan.version}
                         </span>
                       </div>
                       <div className="flex items-center gap-2">
-                        <Badge variant={plan.type === 'Patch' ? 'warning' : 'secondary'}>
+                        <Badge variant={plan.type === 'Patch' ? 'warning' : 'secondary'} className="text-xs">
                           {plan.type === 'Release' ? '需求版' : '补丁版'}
                         </Badge>
-                        <Badge variant={statusMap[plan.status]?.variant || 'outline'}>
+                        <Badge variant={statusMap[plan.status]?.variant || 'outline'} className="text-xs">
                           {statusMap[plan.status]?.label || plan.status}
                         </Badge>
                       </div>
@@ -385,7 +385,7 @@ export default function PlansPage() {
                       <Button
                         variant="ghost"
                         size="icon"
-                        className="opacity-0 group-hover:opacity-100 transition-opacity"
+                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
                         onClick={(e) => {
                           e.preventDefault()
                           e.stopPropagation()
@@ -393,17 +393,17 @@ export default function PlansPage() {
                           setDeleteDialogOpen(true)
                         }}
                       >
-                        <Trash2 className="h-4 w-4 text-destructive" />
+                        <Trash2 className="h-3 w-3 text-destructive" />
                       </Button>
-                      <ChevronRight className="h-5 w-5 text-muted-foreground" />
+                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
                     </div>
                   </div>
 
-                  <div className="mt-4 text-sm text-muted-foreground">
+                  <div className="mt-2 text-sm text-muted-foreground">
                     {plan.summary}
                   </div>
 
-                  <div className="mt-4 flex items-center gap-6 text-xs text-muted-foreground">
+                  <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
                     {plan.manifest && (
                       <div>
                         前端: <span className="text-foreground">{plan.manifest.frontendVersion}</span>
