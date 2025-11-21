@@ -39,10 +39,15 @@ export async function POST(
       )
     }
 
+    // Extract version line from version
+    const versionParts = newVersion.split('.')
+    const versionLine = `${versionParts[0]}.${versionParts[1]}`
+
     // Create new plan
     const newPlan = await prisma.plan.create({
       data: {
         version: newVersion,
+        versionLine,
         type: newType,
         status: 'draft',
         summary: newSummary || `从 ${sourceManifest.plan.version} 复制`,
