@@ -49,21 +49,116 @@ export default function DiffPage() {
   const handleCompare = () => {
     if (!planAId || !planBId) return
 
-    // Version comparison not supported in localStorage mode
-    toast({
-      variant: 'destructive',
-      title: '功能不可用',
-      description: '当前使用本地存储模式，不支持版本对比功能。版本对比需要完整的清单数据。',
+    setLoading(true)
+
+    const planA = plans.find(p => p.id === planAId)
+    const planB = plans.find(p => p.id === planBId)
+
+    if (!planA || !planB) {
+      toast({
+        variant: 'destructive',
+        title: '对比失败',
+        description: '未找到选中的版本',
+      })
+      setLoading(false)
+      return
+    }
+
+    // 对比基本信息
+    const diff: DiffItem[] = []
+
+    // 对比版本类型
+    if (planA.type !== planB.type) {
+      diff.push({
+        componentName: '版本类型',
+        versionA: planA.type === 'Release' ? '需求版' : '补丁版',
+        versionB: planB.type === 'Release' ? '需求版' : '补丁版',
+        changeType: 'changed',
+      })
+    }
+
+    // 对比版本状态
+    if (planA.status !== planB.status) {
+      const statusMap: Record<string, string> = {
+        draft: '草稿',
+        testing: '待测试',
+        ready: '待发布',
+        released: '已发布',
+        deprecated: '已废弃'
+      }
+      diff.push({
+        componentName: '版本状态',
+        versionA: statusMap[planA.status] || planA.status,
+        versionB: statusMap[planB.status] || planB.status,
+        changeType: 'changed',
+      })
+    }
+
+    // 对比描述
+    if (planA.summary !== planB.summary) {
+      diff.push({
+        componentName: '版本描述',
+        versionA: planA.summary.substring(0, 30) + (planA.summary.length > 30 ? '...' : ''),
+        versionB: planB.summary.substring(0, 30) + (planB.summary.length > 30 ? '...' : ''),
+        changeType: 'changed',
+        reasonA: planA.summary,
+        reasonB: planB.summary,
+      })
+    }
+
+    // 对比关联需求
+    const reqsA = JSON.parse(planA.relatedRequirements || '[]')
+    const reqsB = JSON.parse(planB.relatedRequirements || '[]')
+    if (JSON.stringify(reqsA) !== JSON.stringify(reqsB)) {
+      diff.push({
+        componentName: '关联需求',
+        versionA: Array.isArray(reqsA) ? reqsA.join(', ') || '无' : '无',
+        versionB: Array.isArray(reqsB) ? reqsB.join(', ') || '无' : '无',
+        changeType: 'changed',
+      })
+    }
+
+    // 对比关联问题
+    const bugsA = JSON.parse(planA.relatedBugs || '[]')
+    const bugsB = JSON.parse(planB.relatedBugs || '[]')
+    if (JSON.stringify(bugsA) !== JSON.stringify(bugsB)) {
+      diff.push({
+        componentName: '关联问题',
+        versionA: Array.isArray(bugsA) ? bugsA.join(', ') || '无' : '无',
+        versionB: Array.isArray(bugsB) ? bugsB.join(', ') || '无' : '无',
+        changeType: 'changed',
+      })
+    }
+
+    setDiffResult({
+      planA: { id: planA.id, version: planA.version },
+      planB: { id: planB.id, version: planB.version },
+      diff,
+      totalChanges: diff.length,
     })
+
+    setLoading(false)
+
+    if (diff.length === 0) {
+      toast({
+        title: '对比完成',
+        description: '两个版本的基本信息完全相同',
+      })
+    } else {
+      toast({
+        title: '对比完成',
+        description: `发现 ${diff.length} 处差异`,
+      })
+    }
   }
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-4">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold gradient-text">版本对比</h1>
-        <p className="text-muted-foreground mt-1">
-          对比两个版本之间的组件变更差异
+        <h1 className="text-2xl font-bold gradient-text">版本对比</h1>
+        <p className="text-sm text-muted-foreground mt-0.5">
+          对比两个版本的基本信息差异（类型、状态、描述、关联需求/问题）
         </p>
       </div>
 
@@ -151,22 +246,22 @@ export default function DiffPage() {
           <CardContent>
             {diffResult.diff.length === 0 ? (
               <div className="text-center py-8 text-muted-foreground">
-                两个版本没有差异
+                两个版本的基本信息完全相同
               </div>
             ) : (
               <div className="rounded-lg border border-border overflow-hidden">
                 <table className="w-full">
                   <thead className="bg-muted/50">
                     <tr>
-                      <th className="px-4 py-3 text-left text-sm font-medium">组件</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">对比项</th>
                       <th className="px-4 py-3 text-left text-sm font-medium">
                         {diffResult.planA.version}
                       </th>
                       <th className="px-4 py-3 text-left text-sm font-medium">
                         {diffResult.planB.version}
                       </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium">变更</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium">原因</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">状态</th>
+                      <th className="px-4 py-3 text-left text-sm font-medium">详细信息</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -185,23 +280,11 @@ export default function DiffPage() {
                           {item.versionB}
                         </td>
                         <td className="px-4 py-3">
-                          <Badge
-                            variant={
-                              item.changeType === 'changed'
-                                ? 'warning'
-                                : item.changeType === 'added'
-                                ? 'success'
-                                : 'destructive'
-                            }
-                          >
-                            {item.changeType === 'changed'
-                              ? '变更'
-                              : item.changeType === 'added'
-                              ? '新增'
-                              : '移除'}
+                          <Badge variant="warning">
+                            差异
                           </Badge>
                         </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground">
+                        <td className="px-4 py-3 text-sm text-muted-foreground max-w-md truncate">
                           {item.reasonB || item.reasonA || '-'}
                         </td>
                       </tr>
