@@ -81,6 +81,7 @@ export default function PlansPage() {
 
   useEffect(() => {
     fetchPlans()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [statusFilter, typeFilter])
 
   const fetchPlans = async () => {
@@ -307,7 +308,7 @@ export default function PlansPage() {
             <DialogDescription>
               确定要删除版本计划 <span className="font-mono font-semibold">{planToDelete?.version}</span> 吗？
               <br />
-              此操作将把计划标记为"已废弃"状态，不会物理删除数据。
+              此操作将把计划标记为&quot;已废弃&quot;状态，不会物理删除数据。
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>

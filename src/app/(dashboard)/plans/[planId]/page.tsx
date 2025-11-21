@@ -103,6 +103,7 @@ export default function PlanDetailPage() {
 
   useEffect(() => {
     fetchPlan()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [params.planId])
 
   const fetchPlan = () => {
@@ -375,7 +376,7 @@ export default function PlanDetailPage() {
                 <DialogDescription>
                   确定要删除版本计划 <span className="font-mono font-semibold">{plan.version}</span> 吗？
                   <br />
-                  此操作将把计划标记为"已废弃"状态，不会物理删除数据。
+                  此操作将把计划标记为&quot;已废弃&quot;状态，不会物理删除数据。
                 </DialogDescription>
               </DialogHeader>
               <DialogFooter>
