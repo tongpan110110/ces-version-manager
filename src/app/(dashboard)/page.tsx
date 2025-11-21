@@ -18,6 +18,7 @@ import {
   Target,
   ExternalLink
 } from 'lucide-react'
+import { useDashboard } from '@/hooks/useLocalData'
 
 interface VersionLineStats {
   versionLine: string
@@ -53,24 +54,15 @@ interface DashboardData {
 }
 
 export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null)
-  const [loading, setLoading] = useState(true)
+  const { loading, data } = useDashboard()
   const [selectedVersionLine, setSelectedVersionLine] = useState<string>('')
 
   useEffect(() => {
-    fetch('/api/dashboard')
-      .then(res => res.json())
-      .then(res => {
-        if (res.success) {
-          setData(res.data)
-          // Auto-select first version line
-          if (res.data.versionLines.length > 0) {
-            setSelectedVersionLine(res.data.versionLines[0].versionLine)
-          }
-        }
-      })
-      .finally(() => setLoading(false))
-  }, [])
+    // Auto-select first version line when data is loaded
+    if (data && data.versionLines.length > 0 && !selectedVersionLine) {
+      setSelectedVersionLine(data.versionLines[0].versionLine)
+    }
+  }, [data, selectedVersionLine])
 
   if (loading) {
     return (

@@ -140,3 +140,84 @@ export function useConfigs() {
 
   return { configs, updateConfig, loading }
 }
+
+// Dashboard API mock
+export function useDashboard() {
+  const { data: plans } = useLocalData<any[]>(STORAGE_KEYS.PLANS, [])
+  const { data: regions } = useLocalData<any[]>(STORAGE_KEYS.REGIONS, [])
+  const { data: regionVersions } = useLocalData<any[]>(STORAGE_KEYS.REGION_VERSIONS, [])
+  const { data: configs } = useLocalData<Record<string, string>>(STORAGE_KEYS.CONFIGS, {})
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    // Simulate loading delay
+    const timer = setTimeout(() => setLoading(false), 100)
+    return () => clearTimeout(timer)
+  }, [])
+
+  // Get active version lines
+  const activeVersionLines: string[] = configs['active_version_lines']
+    ? JSON.parse(configs['active_version_lines'])
+    : []
+
+  // Calculate stats
+  const totalPlans = plans.length
+  const draftPlans = plans.filter((p) => p.status === 'draft').length
+  const testingPlans = plans.filter((p) => p.status === 'testing').length
+  const readyPlans = plans.filter((p) => p.status === 'ready').length
+  const releasedPlans = plans.filter((p) => p.status === 'released').length
+  const totalRegions = regions.length
+
+  // Calculate version line stats
+  const versionLineStats = activeVersionLines.map((versionLine) => {
+    const baseline = configs[`baseline_${versionLine}`] || ''
+    const baselinePlan = plans.find((p) => p.version === baseline)
+
+    // Get regions on this version line
+    const regionsOnLine = regionVersions.filter((rv) => {
+      const plan = plans.find((p) => p.id === rv.planId)
+      return plan && plan.versionLine === versionLine
+    })
+
+    const atBaseline = baselinePlan
+      ? regionsOnLine.filter((rv) => rv.planId === baselinePlan.id).length
+      : 0
+    const behindBaseline = regionsOnLine.length - atBaseline
+
+    return {
+      versionLine,
+      baseline,
+      totalRegions: regionsOnLine.length,
+      atBaseline,
+      behindBaseline,
+      alignmentRate: regionsOnLine.length > 0 ? Math.round((atBaseline / regionsOnLine.length) * 100) : 0,
+      coverage: totalRegions > 0 ? Math.round((regionsOnLine.length / totalRegions) * 100) : 0,
+    }
+  })
+
+  const totalAlignedRegions = versionLineStats.reduce((sum, vl) => sum + vl.atBaseline, 0)
+  const overallAlignmentRate = totalRegions > 0 ? Math.round((totalAlignedRegions / totalRegions) * 100) : 0
+
+  // Get recent plans
+  const recentPlans = [...plans]
+    .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+    .slice(0, 5)
+
+  return {
+    loading,
+    data: {
+      stats: {
+        totalPlans,
+        draftPlans,
+        testingPlans,
+        readyPlans,
+        releasedPlans,
+        totalRegions,
+        totalAlignedRegions,
+        overallAlignmentRate,
+      },
+      versionLines: versionLineStats,
+      recentPlans,
+    },
+  }
+}

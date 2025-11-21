@@ -8,6 +8,7 @@ import { Label } from '@/components/ui/label'
 import { Badge } from '@/components/ui/badge'
 import { Settings, Save, Plus, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { useConfigs } from '@/hooks/useLocalData'
 
 interface SystemConfig {
   id: string
@@ -17,8 +18,7 @@ interface SystemConfig {
 }
 
 export default function SettingsPage() {
-  const [configs, setConfigs] = useState<SystemConfig[]>([])
-  const [loading, setLoading] = useState(true)
+  const { configs, updateConfig, loading } = useConfigs()
   const [saving, setSaving] = useState(false)
   const { toast } = useToast()
 
@@ -28,60 +28,27 @@ export default function SettingsPage() {
   const [newVersionLine, setNewVersionLine] = useState('')
 
   useEffect(() => {
-    loadConfigs()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const loadConfigs = async () => {
-    try {
-      const res = await fetch('/api/config')
-      const data = await res.json()
-      if (data.success) {
-        setConfigs(data.data.configs)
-
-        // Parse configs
-        const baselines: Record<string, string> = {}
-        data.data.configs.forEach((config: SystemConfig) => {
-          if (config.key.startsWith('baseline_')) {
-            const versionLine = config.key.replace('baseline_', '')
-            baselines[versionLine] = config.value
-          } else if (config.key === 'active_version_lines') {
-            setActiveVersionLines(JSON.parse(config.value))
-          }
-        })
-        setBaselineValues(baselines)
+    // Parse configs
+    const baselines: Record<string, string> = {}
+    Object.keys(configs).forEach((key) => {
+      if (key.startsWith('baseline_')) {
+        const versionLine = key.replace('baseline_', '')
+        baselines[versionLine] = configs[key]
+      } else if (key === 'active_version_lines') {
+        setActiveVersionLines(JSON.parse(configs[key] || '[]'))
       }
-    } catch (error) {
-      console.error('Error loading configs:', error)
-      toast({
-        variant: 'destructive',
-        title: '加载失败',
-        description: '无法加载系统配置',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
+    })
+    setBaselineValues(baselines)
+  }, [configs])
 
-  const saveConfig = async (key: string, value: string) => {
+  const saveConfig = (key: string, value: string) => {
     setSaving(true)
     try {
-      const res = await fetch('/api/config', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ key, value }),
+      updateConfig(key, value)
+      toast({
+        title: '保存成功',
+        description: `已更新 ${key}`,
       })
-
-      const data = await res.json()
-      if (data.success) {
-        toast({
-          title: '保存成功',
-          description: `已更新 ${key}`,
-        })
-        loadConfigs()
-      } else {
-        throw new Error(data.error)
-      }
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -176,8 +143,6 @@ export default function SettingsPage() {
       {/* Baseline Configurations */}
       <div className="grid gap-6 md:grid-cols-2">
         {activeVersionLines.map(versionLine => {
-          const key = `baseline_${versionLine}`
-          const config = configs.find(c => c.key === key)
           const currentValue = baselineValues[versionLine] || ''
 
           return (
@@ -210,12 +175,6 @@ export default function SettingsPage() {
                   <Save className="h-4 w-4 mr-2" />
                   保存基线
                 </Button>
-
-                {config && (
-                  <p className="text-xs text-muted-foreground">
-                    上次更新：{new Date(config.updatedAt).toLocaleString('zh-CN')}
-                  </p>
-                )}
               </CardContent>
             </Card>
           )
@@ -229,18 +188,15 @@ export default function SettingsPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-2">
-            {configs.map(config => (
+            {Object.entries(configs).map(([key, value]) => (
               <div
-                key={config.id}
+                key={key}
                 className="flex items-center justify-between p-3 rounded-lg bg-muted/50"
               >
                 <div>
-                  <p className="font-mono text-sm font-semibold">{config.key}</p>
-                  <p className="text-sm text-muted-foreground">{config.value}</p>
+                  <p className="font-mono text-sm font-semibold">{key}</p>
+                  <p className="text-sm text-muted-foreground">{value}</p>
                 </div>
-                <Badge variant="outline" className="text-xs">
-                  {new Date(config.updatedAt).toLocaleDateString('zh-CN')}
-                </Badge>
               </div>
             ))}
           </div>

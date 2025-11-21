@@ -35,6 +35,7 @@ import {
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
 import { useRouter } from 'next/navigation'
+import { usePlans } from '@/hooks/useLocalData'
 
 interface Plan {
   id: string
@@ -56,8 +57,7 @@ interface Plan {
 }
 
 export default function PlansPage() {
-  const [plans, setPlans] = useState<Plan[]>([])
-  const [loading, setLoading] = useState(true)
+  const { plans, createPlan, deletePlan, loading } = usePlans()
   const [search, setSearch] = useState('')
   const [statusFilter, setStatusFilter] = useState('all')
   const [typeFilter, setTypeFilter] = useState('all')
@@ -74,34 +74,10 @@ export default function PlansPage() {
   // Delete plan dialog
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [deleting, setDeleting] = useState(false)
-  const [planToDelete, setPlanToDelete] = useState<Plan | null>(null)
+  const [planToDelete, setPlanToDelete] = useState<any>(null)
 
   const { toast } = useToast()
   const router = useRouter()
-
-  useEffect(() => {
-    fetchPlans()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [statusFilter, typeFilter])
-
-  const fetchPlans = async () => {
-    setLoading(true)
-    const params = new URLSearchParams()
-    if (statusFilter !== 'all') params.set('status', statusFilter)
-    if (typeFilter !== 'all') params.set('type', typeFilter)
-    if (search) params.set('search', search)
-
-    const res = await fetch(`/api/plans?${params}`)
-    const data = await res.json()
-    if (data.success) {
-      setPlans(data.data)
-    }
-    setLoading(false)
-  }
-
-  const handleSearch = () => {
-    fetchPlans()
-  }
 
   const handleCreatePlan = async () => {
     if (!newVersion || !newSummary) {
@@ -115,38 +91,33 @@ export default function PlansPage() {
 
     setCreating(true)
     try {
-      const res = await fetch('/api/plans', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          version: newVersion,
-          type: newType,
-          summary: newSummary,
-          relatedRequirements: newRequirements.split(',').map(r => r.trim()).filter(Boolean),
-          relatedBugs: newBugs.split(',').map(b => b.trim()).filter(Boolean),
-        }),
+      // Extract version line from version
+      const versionParts = newVersion.split('.')
+      const versionLine = `${versionParts[0]}.${versionParts[1]}`
+
+      const newPlan = createPlan({
+        version: newVersion,
+        versionLine,
+        type: newType,
+        summary: newSummary,
+        relatedRequirements: JSON.stringify(newRequirements.split(',').map(r => r.trim()).filter(Boolean)),
+        relatedBugs: JSON.stringify(newBugs.split(',').map(b => b.trim()).filter(Boolean)),
+        status: 'draft',
       })
 
-      const data = await res.json()
-      if (data.success) {
-        toast({
-          title: '创建成功',
-          description: `版本计划 ${newVersion} 已创建`,
-        })
-        setCreateDialogOpen(false)
-        // Reset form
-        setNewVersion('')
-        setNewType('Release')
-        setNewSummary('')
-        setNewRequirements('')
-        setNewBugs('')
-        // Refresh list
-        fetchPlans()
-        // Navigate to the new plan
-        router.push(`/plans/${data.data.id}`)
-      } else {
-        throw new Error(data.error)
-      }
+      toast({
+        title: '创建成功',
+        description: `版本计划 ${newVersion} 已创建`,
+      })
+      setCreateDialogOpen(false)
+      // Reset form
+      setNewVersion('')
+      setNewType('Release')
+      setNewSummary('')
+      setNewRequirements('')
+      setNewBugs('')
+      // Navigate to the new plan
+      router.push(`/plans/${newPlan.id}`)
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -163,22 +134,13 @@ export default function PlansPage() {
 
     setDeleting(true)
     try {
-      const res = await fetch(`/api/plans/${planToDelete.id}`, {
-        method: 'DELETE',
+      deletePlan(planToDelete.id)
+      toast({
+        title: '删除成功',
+        description: `版本计划 ${planToDelete.version} 已标记为废弃`,
       })
-      const data = await res.json()
-      if (data.success) {
-        toast({
-          title: '删除成功',
-          description: `版本计划 ${planToDelete.version} 已标记为废弃`,
-        })
-        setDeleteDialogOpen(false)
-        setPlanToDelete(null)
-        // Refresh list
-        fetchPlans()
-      } else {
-        throw new Error(data.error)
-      }
+      setDeleteDialogOpen(false)
+      setPlanToDelete(null)
     } catch (error) {
       toast({
         variant: 'destructive',
@@ -198,9 +160,20 @@ export default function PlansPage() {
     deprecated: { label: '已废弃', variant: 'deprecated' },
   }
 
-  const filteredPlans = plans.filter(plan =>
-    plan.version.includes(search) || plan.summary.includes(search)
-  )
+  const filteredPlans = plans.filter(plan => {
+    // Status filter
+    if (statusFilter !== 'all' && plan.status !== statusFilter) return false
+    // Type filter
+    if (typeFilter !== 'all' && plan.type !== typeFilter) return false
+    // Search filter
+    if (search && !plan.version.includes(search) && !plan.summary.includes(search)) return false
+    return true
+  }).map(plan => ({
+    ...plan,
+    // Add mock data for manifest and _count
+    manifest: null,
+    _count: { regionVersions: 0 }
+  }))
 
   return (
     <div className="space-y-6">
@@ -344,7 +317,6 @@ export default function PlansPage() {
                 placeholder="搜索版本号或描述..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => e.key === 'Enter' && handleSearch()}
                 className="pl-9"
               />
             </div>
@@ -371,7 +343,7 @@ export default function PlansPage() {
                 <SelectItem value="Patch">补丁版</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={handleSearch}>
+            <Button variant="outline" onClick={() => {}}>
               <Filter className="h-4 w-4 mr-2" />
               筛选
             </Button>

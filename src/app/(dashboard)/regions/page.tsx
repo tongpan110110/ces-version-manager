@@ -23,6 +23,7 @@ import { Switch } from '@/components/ui/switch'
 import { Map, Filter, CheckCircle, AlertCircle, Clock, Edit } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
+import { useRegions, usePlans } from '@/hooks/useLocalData'
 
 interface Region {
   id: string
@@ -42,16 +43,13 @@ interface Region {
 }
 
 export default function RegionsPage() {
-  const [regions, setRegions] = useState<Region[]>([])
-  const [plans, setPlans] = useState<any[]>([])
-  const [baselines, setBaselines] = useState<Record<string, string>>({})
-  const [versionLines, setVersionLines] = useState<string[]>([])
-  const [loading, setLoading] = useState(true)
+  const { regions, baselines, versionLines, updateRegionVersion, loading } = useRegions()
+  const { plans } = usePlans()
   const [areaFilter, setAreaFilter] = useState('all')
   const [versionLineFilter, setVersionLineFilter] = useState('all')
 
   // Edit dialog state
-  const [editingRegion, setEditingRegion] = useState<Region | null>(null)
+  const [editingRegion, setEditingRegion] = useState<any>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [selectedPlanId, setSelectedPlanId] = useState('')
   const [backendReady, setBackendReady] = useState(false)
@@ -60,43 +58,7 @@ export default function RegionsPage() {
 
   const { toast } = useToast()
 
-  useEffect(() => {
-    loadData()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [])
-
-  const loadData = async () => {
-    try {
-      const [regionsRes, plansRes] = await Promise.all([
-        fetch('/api/regions'),
-        fetch('/api/plans')
-      ])
-
-      const regionsData = await regionsRes.json()
-      const plansData = await plansRes.json()
-
-      if (regionsData.success) {
-        setRegions(regionsData.data.regions || [])
-        setBaselines(regionsData.data.baselines || {})
-        setVersionLines(regionsData.data.versionLines || [])
-      }
-
-      if (plansData.success) {
-        setPlans(plansData.data || [])
-      }
-    } catch (error) {
-      console.error('Error loading data:', error)
-      toast({
-        variant: 'destructive',
-        title: '加载失败',
-        description: '无法加载数据',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  const handleEditRegion = (region: Region) => {
+  const handleEditRegion = (region: any) => {
     setEditingRegion(region)
     setSelectedPlanId(region.currentVersion?.plan.id || '')
     setBackendReady(region.currentVersion?.backendReady || false)
@@ -109,27 +71,12 @@ export default function RegionsPage() {
 
     setSaving(true)
     try {
-      const res = await fetch(`/api/regions/${editingRegion.id}/version`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          planId: selectedPlanId,
-          backendReady,
-          frontendReady,
-        }),
+      updateRegionVersion(editingRegion.id, selectedPlanId, backendReady, frontendReady)
+      toast({
+        title: '保存成功',
+        description: `已更新局点 ${editingRegion.name} 的版本信息`,
       })
-
-      const data = await res.json()
-      if (data.success) {
-        toast({
-          title: '保存成功',
-          description: `已更新局点 ${editingRegion.name} 的版本信息`,
-        })
-        setEditDialogOpen(false)
-        loadData()
-      } else {
-        throw new Error(data.error)
-      }
+      setEditDialogOpen(false)
     } catch (error) {
       toast({
         variant: 'destructive',
