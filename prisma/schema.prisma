@@ -1,0 +1,128 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = "file:./dev.db"
+}
+
+// 发布计划
+model Plan {
+  id                   String     @id @default(cuid())
+  version              String     @unique
+  versionLine          String     // Version line extracted from version (e.g., "25.8", "25.10")
+  type                 String     // Release | Patch
+  status               String     @default("draft") // draft | testing | ready | released | deprecated
+  summary              String
+  relatedRequirements  String     @default("[]") // JSON array of requirement IDs
+  relatedBugs          String     @default("[]") // JSON array of bug IDs
+  createdAt            DateTime   @default(now())
+  updatedAt            DateTime   @updatedAt
+
+  manifest             Manifest?
+  regionVersions       RegionVersion[]
+
+  @@index([status])
+  @@index([type])
+  @@index([versionLine])
+}
+
+// 版本交付套件
+model Manifest {
+  id                      String              @id @default(cuid())
+  planId                  String              @unique
+  plan                    Plan                @relation(fields: [planId], references: [id], onDelete: Cascade)
+
+  // Frontend
+  frontendVersion         String
+  frontendChangeType      String              @default("unchanged") // upgrade | unchanged | new | removed
+  frontendChangeReason    String              @default("")
+
+  // Checks
+  feBeCheckStatus         String              @default("ok") // ok | warn | error
+  feBeCheckMessage        String              @default("")
+  dependencyCheckStatus   String              @default("ok") // ok | warn | error
+  dependencyCheckMessage  String              @default("")
+
+  createdAt               DateTime            @default(now())
+  updatedAt               DateTime            @updatedAt
+
+  components              ManifestComponent[]
+
+  @@index([planId])
+}
+
+// 交付套件中的组件版本
+model ManifestComponent {
+  id              String    @id @default(cuid())
+  manifestId      String
+  manifest        Manifest  @relation(fields: [manifestId], references: [id], onDelete: Cascade)
+
+  componentName   String
+  targetVersion   String
+  changeType      String    @default("unchanged") // upgrade | unchanged | new | removed
+  changeReason    String    @default("")
+
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([manifestId, componentName])
+  @@index([manifestId])
+  @@index([componentName])
+}
+
+// 局点
+model Region {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  area          String    // domestic | apac | africa | latam
+  isGray        Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  currentVersion RegionVersion?
+
+  @@index([area])
+}
+
+// 局点当前版本
+model RegionVersion {
+  id              String    @id @default(cuid())
+  regionId        String    @unique
+  region          Region    @relation(fields: [regionId], references: [id], onDelete: Cascade)
+
+  planId          String
+  plan            Plan      @relation(fields: [planId], references: [id])
+
+  backendReady    Boolean   @default(false)
+  frontendReady   Boolean   @default(false)
+
+  lastUpdatedAt   DateTime  @default(now())
+
+  @@index([planId])
+}
+
+// 审计日志
+model AuditLog {
+  id          String    @id @default(cuid())
+  entityType  String    // plan | manifest | region
+  entityId    String
+  action      String    // create | update | delete | status_change
+  field       String?
+  oldValue    String?
+  newValue    String?
+  operator    String    @default("system")
+  createdAt   DateTime  @default(now())
+
+  @@index([entityType, entityId])
+  @@index([createdAt])
+}
+
+// 系统配置（如当前基线版本）
+model SystemConfig {
+  id        String    @id @default(cuid())
+  key       String    @unique
+  value     String
+  updatedAt DateTime  @updatedAt
+}
