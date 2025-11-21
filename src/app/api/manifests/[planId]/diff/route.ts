@@ -74,7 +74,7 @@ export async function GET(
       ...Array.from(componentsB.keys()),
     ])
 
-    for (const name of allComponents) {
+    for (const name of Array.from(allComponents)) {
       const compA = componentsA.get(name)
       const compB = componentsB.get(name)
 
