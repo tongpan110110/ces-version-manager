@@ -170,7 +170,7 @@ export default function RegionsPage() {
           <div className="text-right">
             <p className="text-xs text-muted-foreground">活跃版本线</p>
             <div className="flex gap-2 mt-1">
-              {versionLines.map(vl => (
+              {versionLines.map((vl: string) => (
                 <Badge key={vl} variant="outline" className="font-mono text-xs">
                   {vl}.x @ {baselines[vl]}
                 </Badge>
@@ -203,7 +203,7 @@ export default function RegionsPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全部版本线</SelectItem>
-                {versionLines.map(vl => (
+                {versionLines.map((vl: string) => (
                   <SelectItem key={vl} value={vl}>{vl}.x</SelectItem>
                 ))}
               </SelectContent>
@@ -233,7 +233,7 @@ export default function RegionsPage() {
       </Card>
 
       {/* Region Cards */}
-      {Object.entries(groupedRegions).map(([area, areaRegions]) => (
+      {(Object.entries(groupedRegions) as [string, any[]][]).map(([area, areaRegions]) => (
         <div key={area}>
           <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
             <Map className="h-4 w-4 text-primary" />
