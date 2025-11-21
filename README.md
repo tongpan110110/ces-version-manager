@@ -20,38 +20,33 @@
 
 ## 快速开始
 
-### 1. 安装依赖
+### 一键启动
 
 ```bash
-# 如果遇到npm缓存问题，可以使用本地缓存
-npm install --cache ./.npm-cache
+# 克隆仓库
+git clone https://github.com/tongpan110110/ces-version-manager.git
+cd ces-version-manager
 
-# 或者使用 yarn/pnpm
-yarn install
-# 或
-pnpm install
-```
+# 安装依赖
+npm install
 
-### 2. 初始化数据库
-
-```bash
-# 生成 Prisma Client
-npm run db:generate
-
-# 推送 schema 到数据库
-npm run db:push
-
-# 运行 seed 脚本初始化模拟数据
-npm run db:seed
-```
-
-### 3. 启动开发服务器
-
-```bash
+# 启动开发服务器（会自动初始化数据库）
 npm run dev
 ```
 
-访问 http://localhost:3000 查看应用。
+就这么简单！访问 [http://localhost:3000](http://localhost:3000) 查看应用。
+
+> **注意**：首次运行 `npm run dev` 时会自动执行数据库初始化，这是正常现象。
+
+### 其他命令
+
+```bash
+# 查看数据库
+npm run db:studio
+
+# 运行种子数据脚本（可选）
+npm run db:seed
+```
 
 ## 项目结构
 
