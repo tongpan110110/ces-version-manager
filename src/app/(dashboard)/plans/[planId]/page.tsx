@@ -38,6 +38,7 @@ import {
 } from 'lucide-react'
 import { formatDate } from '@/lib/utils'
 import { useToast } from '@/hooks/use-toast'
+import { usePlans } from '@/hooks/useLocalData'
 
 interface ManifestComponent {
   id: string
@@ -83,8 +84,8 @@ export default function PlanDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
+  const { plans, updatePlan, deletePlan: deletePlanFn, loading: plansLoading } = usePlans()
   const [plan, setPlan] = useState<PlanDetail | null>(null)
-  const [loading, setLoading] = useState(true)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [editManifestOpen, setEditManifestOpen] = useState(false)
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
@@ -102,126 +103,92 @@ export default function PlanDetailPage() {
   const [frontendChangeReason, setFrontendChangeReason] = useState('')
 
   useEffect(() => {
-    fetchPlan()
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [params.planId])
+    if (!plansLoading && params.planId) {
+      const foundPlan = plans.find(p => p.id === params.planId)
+      if (foundPlan) {
+        // Convert to PlanDetail format
+        const planDetail: PlanDetail = {
+          ...foundPlan,
+          manifest: null, // No manifest data in localStorage
+          regionVersions: [] // No region version data here
+        }
+        setPlan(planDetail)
+        setEditSummary(foundPlan.summary)
+        const reqs = JSON.parse(foundPlan.relatedRequirements || '[]')
+        const bugs = JSON.parse(foundPlan.relatedBugs || '[]')
+        setEditRequirements(Array.isArray(reqs) ? reqs.join(', ') : '')
+        setEditBugs(Array.isArray(bugs) ? bugs.join(', ') : '')
+      } else {
+        setPlan(null)
+      }
+    }
+  }, [params.planId, plans, plansLoading])
 
-  const fetchPlan = () => {
+  const handleStatusChange = (newStatus: string) => {
     if (params.planId) {
-      fetch(`/api/plans/${params.planId}`)
-        .then(res => res.json())
-        .then(res => {
-          if (res.success) {
-            setPlan(res.data)
-            setEditSummary(res.data.summary)
-            setEditRequirements(JSON.parse(res.data.relatedRequirements || '[]').join(', '))
-            setEditBugs(JSON.parse(res.data.relatedBugs || '[]').join(', '))
-            if (res.data.manifest) {
-              setFrontendVersion(res.data.manifest.frontendVersion)
-              setFrontendChangeType(res.data.manifest.frontendChangeType)
-              setFrontendChangeReason(res.data.manifest.frontendChangeReason)
-            }
-          }
-        })
-        .finally(() => setLoading(false))
-    }
-  }
-
-  const handleStatusChange = async (newStatus: string) => {
-    const res = await fetch(`/api/plans/${params.planId}/status`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ status: newStatus }),
-    })
-    const data = await res.json()
-    if (data.success) {
+      updatePlan(params.planId as string, { status: newStatus })
       setPlan(prev => prev ? { ...prev, status: newStatus } : null)
+      toast({
+        title: '状态已更新',
+        description: `计划状态已更新为 ${statusMap[newStatus]?.label}`,
+      })
     }
   }
 
-  const handleSavePlan = async () => {
+  const handleSavePlan = () => {
     const reqArray = editRequirements.split(',').map(s => s.trim()).filter(Boolean)
     const bugArray = editBugs.split(',').map(s => s.trim()).filter(Boolean)
 
-    const res = await fetch(`/api/plans/${params.planId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    if (params.planId) {
+      updatePlan(params.planId as string, {
         summary: editSummary,
-        relatedRequirements: reqArray,
-        relatedBugs: bugArray,
-      }),
-    })
-    const data = await res.json()
-    if (data.success) {
-      fetchPlan()
+        relatedRequirements: JSON.stringify(reqArray),
+        relatedBugs: JSON.stringify(bugArray),
+      })
+      setPlan(prev => prev ? {
+        ...prev,
+        summary: editSummary,
+        relatedRequirements: JSON.stringify(reqArray),
+        relatedBugs: JSON.stringify(bugArray),
+      } : null)
       setEditDialogOpen(false)
+      toast({
+        title: '保存成功',
+        description: '计划信息已更新',
+      })
     }
   }
 
-  const handleSaveManifest = async () => {
-    if (!plan?.manifest) return
-
-    const res = await fetch(`/api/manifests/${params.planId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        frontendVersion,
-        frontendChangeType,
-        frontendChangeReason,
-      }),
+  const handleSaveManifest = () => {
+    // Manifest editing not supported in localStorage mode
+    toast({
+      variant: 'destructive',
+      title: '功能不可用',
+      description: '当前使用本地存储模式，不支持编辑清单数据',
     })
-    const data = await res.json()
-    if (data.success) {
-      fetchPlan()
-      setEditManifestOpen(false)
-    }
+    setEditManifestOpen(false)
   }
 
-  const handleSaveComponent = async (component: ManifestComponent) => {
-    if (!plan?.manifest) return
-
-    const updatedComponents = plan.manifest.components.map(c =>
-      c.id === component.id ? component : c
-    )
-
-    const res = await fetch(`/api/manifests/${params.planId}`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        frontendVersion: plan.manifest.frontendVersion,
-        frontendChangeType: plan.manifest.frontendChangeType,
-        frontendChangeReason: plan.manifest.frontendChangeReason,
-        components: updatedComponents.map(c => ({
-          componentName: c.componentName,
-          targetVersion: c.targetVersion,
-          changeType: c.changeType,
-          changeReason: c.changeReason,
-        })),
-      }),
+  const handleSaveComponent = (component: ManifestComponent) => {
+    // Component editing not supported in localStorage mode
+    toast({
+      variant: 'destructive',
+      title: '功能不可用',
+      description: '当前使用本地存储模式，不支持编辑组件数据',
     })
-    const data = await res.json()
-    if (data.success) {
-      fetchPlan()
-      setEditingComponent(null)
-    }
+    setEditingComponent(null)
   }
 
-  const handleDeletePlan = async () => {
+  const handleDeletePlan = () => {
     setDeleting(true)
     try {
-      const res = await fetch(`/api/plans/${params.planId}`, {
-        method: 'DELETE',
-      })
-      const data = await res.json()
-      if (data.success) {
+      if (params.planId) {
+        deletePlanFn(params.planId as string)
         toast({
           title: '删除成功',
           description: `版本计划 ${plan?.version} 已标记为废弃`,
         })
         router.push('/plans')
-      } else {
-        throw new Error(data.error)
       }
     } catch (error) {
       toast({
@@ -235,7 +202,15 @@ export default function PlanDetailPage() {
     }
   }
 
-  if (loading) {
+  const statusMap: Record<string, { label: string; variant: any; next?: string; nextLabel?: string }> = {
+    draft: { label: '草稿', variant: 'draft', next: 'testing', nextLabel: '提交测试' },
+    testing: { label: '待测试', variant: 'testing', next: 'ready', nextLabel: '测试通过' },
+    ready: { label: '待发布', variant: 'ready', next: 'released', nextLabel: '确认发布' },
+    released: { label: '已发布', variant: 'released' },
+    deprecated: { label: '已废弃', variant: 'deprecated' },
+  }
+
+  if (plansLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-muted-foreground">加载中...</div>
@@ -249,14 +224,6 @@ export default function PlanDetailPage() {
         <div className="text-destructive">计划不存在</div>
       </div>
     )
-  }
-
-  const statusMap: Record<string, { label: string; variant: any; next?: string; nextLabel?: string }> = {
-    draft: { label: '草稿', variant: 'draft', next: 'testing', nextLabel: '提交测试' },
-    testing: { label: '待测试', variant: 'testing', next: 'ready', nextLabel: '测试通过' },
-    ready: { label: '待发布', variant: 'ready', next: 'released', nextLabel: '确认发布' },
-    released: { label: '已发布', variant: 'released' },
-    deprecated: { label: '已废弃', variant: 'deprecated' },
   }
 
   const checkStatusIcon = (status: string) => {
