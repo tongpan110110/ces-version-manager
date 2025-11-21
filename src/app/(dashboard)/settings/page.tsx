@@ -91,7 +91,7 @@ export default function SettingsPage() {
       <div>
         <h1 className="text-2xl font-bold gradient-text">系统设置</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          管理基线版本和活跃版本线配置
+          管理目标版本和活跃版本线配置
         </p>
       </div>
 
@@ -150,12 +150,12 @@ export default function SettingsPage() {
             <Card key={versionLine} className="glass">
               <CardHeader className="pb-3">
                 <CardTitle className="text-base">
-                  {versionLine}.x 基线版本
+                  {versionLine}.x 目标版本
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-3 pb-4">
                 <div className="space-y-1.5">
-                  <Label className="text-xs">基线版本号</Label>
+                  <Label className="text-xs">目标版本号</Label>
                   <Input
                     placeholder={`如 ${versionLine}.0`}
                     value={currentValue}
@@ -176,7 +176,7 @@ export default function SettingsPage() {
                   size="sm"
                 >
                   <Save className="h-3 w-3 mr-1.5" />
-                  保存基线
+                  保存目标版本
                 </Button>
               </CardContent>
             </Card>

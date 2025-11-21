@@ -131,7 +131,7 @@ export default function DashboardPage() {
               {data.stats.overallAlignmentRate}%
             </div>
             <p className="text-xs text-muted-foreground">
-              {data.stats.totalAlignedRegions}/{data.stats.totalRegions} 局点对齐各版本线基线
+              {data.stats.totalAlignedRegions}/{data.stats.totalRegions} 局点对齐目标版本
             </p>
           </CardContent>
         </Card>
@@ -202,7 +202,7 @@ export default function DashboardPage() {
                         {versionLine.versionLine}.x
                       </h3>
                       <p className="text-xs text-muted-foreground mt-0.5">
-                        当前基线版本：<span className="font-mono font-semibold">{versionLine.baseline}</span>
+                        当前目标版本：<span className="font-mono font-semibold">{versionLine.baseline}</span>
                       </p>
                     </div>
                     <div className="text-right">
@@ -233,7 +233,7 @@ export default function DashboardPage() {
                             <p className="text-2xl font-bold text-success">
                               {versionLine.atBaseline}
                             </p>
-                            <p className="text-xs text-muted-foreground">已对齐基线</p>
+                            <p className="text-xs text-muted-foreground">已对齐目标版本</p>
                           </div>
                         </div>
                       </CardContent>
@@ -340,7 +340,7 @@ export default function DashboardPage() {
               <CheckCircle className="h-7 w-7 text-success" />
               <div>
                 <p className="text-xl font-bold">{data.stats.totalAlignedRegions}</p>
-                <p className="text-xs text-muted-foreground">局点对齐基线</p>
+                <p className="text-xs text-muted-foreground">局点对齐目标版本</p>
               </div>
             </div>
           </CardContent>
