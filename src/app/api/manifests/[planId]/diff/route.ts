@@ -70,8 +70,8 @@ export async function GET(
 
     // Get all unique component names
     const allComponents = new Set([
-      ...componentsA.keys(),
-      ...componentsB.keys(),
+      ...Array.from(componentsA.keys()),
+      ...Array.from(componentsB.keys()),
     ])
 
     for (const name of allComponents) {
