@@ -12,6 +12,8 @@ import {
   SelectValue,
 } from '@/components/ui/select'
 import { GitCompare, ArrowRight, Download } from 'lucide-react'
+import { usePlans } from '@/hooks/useLocalData'
+import { useToast } from '@/hooks/use-toast'
 
 interface Plan {
   id: string
@@ -37,32 +39,22 @@ interface DiffResult {
 }
 
 export default function DiffPage() {
-  const [plans, setPlans] = useState<Plan[]>([])
+  const { plans, loading: plansLoading } = usePlans()
+  const { toast } = useToast()
   const [planAId, setPlanAId] = useState<string>('')
   const [planBId, setPlanBId] = useState<string>('')
   const [diffResult, setDiffResult] = useState<DiffResult | null>(null)
   const [loading, setLoading] = useState(false)
 
-  useEffect(() => {
-    fetch('/api/plans')
-      .then(res => res.json())
-      .then(res => {
-        if (res.success) {
-          setPlans(res.data)
-        }
-      })
-  }, [])
-
-  const handleCompare = async () => {
+  const handleCompare = () => {
     if (!planAId || !planBId) return
 
-    setLoading(true)
-    const res = await fetch(`/api/manifests/${planAId}/diff?compareTo=${planBId}`)
-    const data = await res.json()
-    if (data.success) {
-      setDiffResult(data.data)
-    }
-    setLoading(false)
+    // Version comparison not supported in localStorage mode
+    toast({
+      variant: 'destructive',
+      title: '功能不可用',
+      description: '当前使用本地存储模式，不支持版本对比功能。版本对比需要完整的清单数据。',
+    })
   }
 
   return (
