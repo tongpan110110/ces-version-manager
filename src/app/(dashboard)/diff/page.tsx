@@ -11,31 +11,53 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import { GitCompare, ArrowRight, Download } from 'lucide-react'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
+import { GitCompare, ArrowRight, Download, Package, FileText } from 'lucide-react'
 import { usePlans } from '@/hooks/useLocalData'
 import { useToast } from '@/hooks/use-toast'
 
 interface Plan {
   id: string
   version: string
+  versionLine: string
   type: string
   status: string
+  summary: string
+  relatedRequirements: string
+  relatedBugs: string
 }
 
-interface DiffItem {
+interface Component {
+  name: string
+  type: 'frontend' | 'backend'
+  version: string
+}
+
+interface ComponentDiff {
   componentName: string
   versionA: string
   versionB: string
-  changeType: string
-  reasonA?: string
-  reasonB?: string
+  changeType: 'upgrade' | 'unchanged' | 'added' | 'removed'
+}
+
+interface NewContent {
+  id: string
+  description: string
+  type: 'requirement' | 'bug'
 }
 
 interface DiffResult {
   planA: { id: string; version: string }
   planB: { id: string; version: string }
-  diff: DiffItem[]
-  totalChanges: number
+  componentDiffs: ComponentDiff[]
+  newContent: NewContent[]
 }
 
 export default function DiffPage() {
@@ -45,6 +67,47 @@ export default function DiffPage() {
   const [planBId, setPlanBId] = useState<string>('')
   const [diffResult, setDiffResult] = useState<DiffResult | null>(null)
   const [loading, setLoading] = useState(false)
+
+  // 从 localStorage 读取组件数据
+  const [components, setComponents] = useState<Component[]>([])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem('settings_components')
+      if (stored) {
+        const comps = JSON.parse(stored)
+        // 模拟组件版本数据 - 在实际应用中应该从 manifest 读取
+        setComponents(comps.map((c: any) => ({
+          name: c.name,
+          type: c.type,
+          version: '1.0.0', // 默认版本
+        })))
+      }
+    }
+  }, [])
+
+  // 模拟：获取某个版本的组件版本
+  const getComponentsForPlan = (planVersion: string): Component[] => {
+    // 在实际应用中，这里应该从 manifest 读取
+    // 现在用模拟数据：根据版本号生成不同的组件版本
+    const versionNum = parseFloat(planVersion) || 1.0
+    return components.map(c => ({
+      ...c,
+      version: `${versionNum.toFixed(1)}`,
+    }))
+  }
+
+  // 简单的版本比较
+  const compareVersions = (v1: string, v2: string): number => {
+    const parts1 = v1.split('.').map(Number)
+    const parts2 = v2.split('.').map(Number)
+    for (let i = 0; i < Math.max(parts1.length, parts2.length); i++) {
+      const p1 = parts1[i] || 0
+      const p2 = parts2[i] || 0
+      if (p1 !== p2) return p1 - p2
+    }
+    return 0
+  }
 
   const handleCompare = () => {
     if (!planAId || !planBId) return
@@ -64,92 +127,158 @@ export default function DiffPage() {
       return
     }
 
-    // 对比基本信息
-    const diff: DiffItem[] = []
+    // 获取两个版本的组件
+    const componentsA = getComponentsForPlan(planA.version)
+    const componentsB = getComponentsForPlan(planB.version)
 
-    // 对比版本类型
-    if (planA.type !== planB.type) {
-      diff.push({
-        componentName: '版本类型',
-        versionA: planA.type === 'Release' ? '需求版' : '补丁版',
-        versionB: planB.type === 'Release' ? '需求版' : '补丁版',
-        changeType: 'changed',
-      })
-    }
+    // 对比组件
+    const componentMapA = new Map(componentsA.map(c => [c.name, c]))
+    const componentMapB = new Map(componentsB.map(c => [c.name, c]))
 
-    // 对比版本状态
-    if (planA.status !== planB.status) {
-      const statusMap: Record<string, string> = {
-        draft: '草稿',
-        testing: '待测试',
-        ready: '待发布',
-        released: '已发布',
-        deprecated: '已废弃'
+    const componentDiffs: ComponentDiff[] = []
+
+    // 处理版本 A 中的组件
+    componentsA.forEach(compA => {
+      const compB = componentMapB.get(compA.name)
+      if (!compB) {
+        // 组件在版本 B 中不存在 - 下线
+        componentDiffs.push({
+          componentName: compA.name,
+          versionA: compA.version,
+          versionB: '-',
+          changeType: 'removed',
+        })
+      } else {
+        // 比较版本
+        const versionDiff = compareVersions(compA.version, compB.version)
+        if (versionDiff < 0) {
+          componentDiffs.push({
+            componentName: compA.name,
+            versionA: compA.version,
+            versionB: compB.version,
+            changeType: 'upgrade',
+          })
+        } else if (versionDiff > 0) {
+          // 版本降低（不常见，但处理）
+          componentDiffs.push({
+            componentName: compA.name,
+            versionA: compA.version,
+            versionB: compB.version,
+            changeType: 'upgrade', // 仍然显示为升级
+          })
+        } else {
+          componentDiffs.push({
+            componentName: compA.name,
+            versionA: compA.version,
+            versionB: compB.version,
+            changeType: 'unchanged',
+          })
+        }
       }
-      diff.push({
-        componentName: '版本状态',
-        versionA: statusMap[planA.status] || planA.status,
-        versionB: statusMap[planB.status] || planB.status,
-        changeType: 'changed',
-      })
-    }
+    })
 
-    // 对比描述
-    if (planA.summary !== planB.summary) {
-      diff.push({
-        componentName: '版本描述',
-        versionA: planA.summary.substring(0, 30) + (planA.summary.length > 30 ? '...' : ''),
-        versionB: planB.summary.substring(0, 30) + (planB.summary.length > 30 ? '...' : ''),
-        changeType: 'changed',
-        reasonA: planA.summary,
-        reasonB: planB.summary,
-      })
-    }
+    // 处理版本 B 中新增的组件
+    componentsB.forEach(compB => {
+      if (!componentMapA.has(compB.name)) {
+        componentDiffs.push({
+          componentName: compB.name,
+          versionA: '-',
+          versionB: compB.version,
+          changeType: 'added',
+        })
+      }
+    })
 
-    // 对比关联需求
+    // 排序：前端组件在前，后端组件按名称排序
+    componentDiffs.sort((a, b) => {
+      const compA = components.find(c => c.name === a.componentName)
+      const compB = components.find(c => c.name === b.componentName)
+      if (compA?.type === 'frontend' && compB?.type !== 'frontend') return -1
+      if (compA?.type !== 'frontend' && compB?.type === 'frontend') return 1
+      return a.componentName.localeCompare(b.componentName)
+    })
+
+    // 对比需求和缺陷
     const reqsA = JSON.parse(planA.relatedRequirements || '[]')
     const reqsB = JSON.parse(planB.relatedRequirements || '[]')
-    if (JSON.stringify(reqsA) !== JSON.stringify(reqsB)) {
-      diff.push({
-        componentName: '关联需求',
-        versionA: Array.isArray(reqsA) ? reqsA.join(', ') || '无' : '无',
-        versionB: Array.isArray(reqsB) ? reqsB.join(', ') || '无' : '无',
-        changeType: 'changed',
-      })
-    }
-
-    // 对比关联问题
     const bugsA = JSON.parse(planA.relatedBugs || '[]')
     const bugsB = JSON.parse(planB.relatedBugs || '[]')
-    if (JSON.stringify(bugsA) !== JSON.stringify(bugsB)) {
-      diff.push({
-        componentName: '关联问题',
-        versionA: Array.isArray(bugsA) ? bugsA.join(', ') || '无' : '无',
-        versionB: Array.isArray(bugsB) ? bugsB.join(', ') || '无' : '无',
-        changeType: 'changed',
-      })
-    }
+
+    // 找出新增的需求
+    const newReqs = reqsB.filter((r: string) => !reqsA.includes(r))
+    // 找出新增的缺陷
+    const newBugs = bugsB.filter((b: string) => !bugsA.includes(b))
+
+    const newContent: NewContent[] = [
+      ...newReqs.map((req: string) => ({
+        id: req,
+        description: `需求 ${req}`, // 实际应用中应该从需求系统获取描述
+        type: 'requirement' as const,
+      })),
+      ...newBugs.map((bug: string) => ({
+        id: bug,
+        description: `缺陷 ${bug}`, // 实际应用中应该从缺陷系统获取描述
+        type: 'bug' as const,
+      })),
+    ].sort((a, b) => a.id.localeCompare(b.id))
 
     setDiffResult({
       planA: { id: planA.id, version: planA.version },
       planB: { id: planB.id, version: planB.version },
-      diff,
-      totalChanges: diff.length,
+      componentDiffs,
+      newContent,
     })
 
     setLoading(false)
 
-    if (diff.length === 0) {
+    const changesCount = componentDiffs.filter(d => d.changeType !== 'unchanged').length
+    if (changesCount === 0 && newContent.length === 0) {
       toast({
         title: '对比完成',
-        description: '两个版本的基本信息完全相同',
+        description: '两个版本完全相同',
       })
     } else {
       toast({
         title: '对比完成',
-        description: `发现 ${diff.length} 处差异`,
+        description: `组件变更 ${changesCount} 处，新增内容 ${newContent.length} 项`,
       })
     }
+  }
+
+  const handleExport = () => {
+    if (!diffResult) return
+
+    // 导出 CSV
+    const headers = ['组件名称', `版本 ${diffResult.planA.version}`, `版本 ${diffResult.planB.version}`, '变更']
+    const rows = diffResult.componentDiffs.map(d => [
+      d.componentName,
+      d.versionA,
+      d.versionB,
+      d.changeType === 'upgrade' ? '升级' :
+      d.changeType === 'unchanged' ? '不变' :
+      d.changeType === 'added' ? '新增' : '下线',
+    ])
+
+    const csv = [headers, ...rows].map(row => row.join(',')).join('\n')
+    const blob = new Blob([csv], { type: 'text/csv' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = `diff_${diffResult.planA.version}_to_${diffResult.planB.version}.csv`
+    a.click()
+    URL.revokeObjectURL(url)
+
+    toast({
+      title: '导出成功',
+      description: '组件差异已导出为 CSV 文件',
+    })
+  }
+
+  const changeTypeMap = {
+    upgrade: { label: '升级', variant: 'success' as const },
+    unchanged: { label: '不变', variant: 'outline' as const },
+    added: { label: '新增', variant: 'default' as const },
+    removed: { label: '下线', variant: 'destructive' as const },
   }
 
   return (
@@ -158,7 +287,7 @@ export default function DiffPage() {
       <div>
         <h1 className="text-2xl font-bold gradient-text">版本对比</h1>
         <p className="text-sm text-muted-foreground mt-0.5">
-          对比两个版本的基本信息差异（类型、状态、描述、关联需求/问题）
+          对比两个版本的组件和需求差异
         </p>
       </div>
 
@@ -177,7 +306,7 @@ export default function DiffPage() {
                 <SelectContent>
                   {plans.map(plan => (
                     <SelectItem key={plan.id} value={plan.id}>
-                      {plan.version} ({plan.type})
+                      {plan.version}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -197,7 +326,7 @@ export default function DiffPage() {
                 <SelectContent>
                   {plans.map(plan => (
                     <SelectItem key={plan.id} value={plan.id}>
-                      {plan.version} ({plan.type})
+                      {plan.version}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -224,77 +353,111 @@ export default function DiffPage() {
       )}
 
       {diffResult && (
-        <Card className="glass">
-          <CardHeader className="flex flex-row items-center justify-between">
-            <div>
+        <>
+          {/* 组件差异 */}
+          <Card className="glass">
+            <CardHeader className="flex flex-row items-center justify-between pb-3">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  <Package className="h-5 w-5 text-primary" />
+                  组件差异
+                </CardTitle>
+                <p className="text-sm text-muted-foreground mt-1">
+                  共 {diffResult.componentDiffs.filter(d => d.changeType !== 'unchanged').length} 处变更
+                </p>
+              </div>
+              <Button variant="outline" size="sm" onClick={handleExport}>
+                <Download className="h-4 w-4 mr-2" />
+                导出
+              </Button>
+            </CardHeader>
+            <CardContent>
+              {diffResult.componentDiffs.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  暂无组件数据
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>组件名称</TableHead>
+                      <TableHead>{diffResult.planA.version}</TableHead>
+                      <TableHead>{diffResult.planB.version}</TableHead>
+                      <TableHead>变更</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {diffResult.componentDiffs.map((item) => (
+                      <TableRow key={item.componentName}>
+                        <TableCell className="font-mono text-sm">
+                          {item.componentName}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm text-muted-foreground">
+                          {item.versionA}
+                        </TableCell>
+                        <TableCell className="font-mono text-sm text-primary">
+                          {item.versionB}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={changeTypeMap[item.changeType].variant} className="text-xs">
+                            {changeTypeMap[item.changeType].label}
+                          </Badge>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* 新增内容 */}
+          <Card className="glass">
+            <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2">
-                <GitCompare className="h-5 w-5 text-primary" />
-                对比结果
+                <FileText className="h-5 w-5 text-primary" />
+                新增内容
               </CardTitle>
               <p className="text-sm text-muted-foreground mt-1">
-                {diffResult.planA.version} → {diffResult.planB.version}
-                <span className="ml-4">
-                  共 {diffResult.totalChanges} 处变更
-                </span>
+                共 {diffResult.newContent.length} 项
               </p>
-            </div>
-            <Button variant="outline" size="sm">
-              <Download className="h-4 w-4 mr-2" />
-              导出
-            </Button>
-          </CardHeader>
-          <CardContent>
-            {diffResult.diff.length === 0 ? (
-              <div className="text-center py-8 text-muted-foreground">
-                两个版本的基本信息完全相同
-              </div>
-            ) : (
-              <div className="rounded-lg border border-border overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-muted/50">
-                    <tr>
-                      <th className="px-4 py-3 text-left text-sm font-medium">对比项</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium">
-                        {diffResult.planA.version}
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium">
-                        {diffResult.planB.version}
-                      </th>
-                      <th className="px-4 py-3 text-left text-sm font-medium">状态</th>
-                      <th className="px-4 py-3 text-left text-sm font-medium">详细信息</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {diffResult.diff.map((item, index) => (
-                      <tr
-                        key={item.componentName}
-                        className={index % 2 === 0 ? 'bg-background' : 'bg-muted/20'}
-                      >
-                        <td className="px-4 py-3 font-mono text-sm">
-                          {item.componentName}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-sm text-muted-foreground">
-                          {item.versionA}
-                        </td>
-                        <td className="px-4 py-3 font-mono text-sm text-primary">
-                          {item.versionB}
-                        </td>
-                        <td className="px-4 py-3">
-                          <Badge variant="warning">
-                            差异
+            </CardHeader>
+            <CardContent>
+              {diffResult.newContent.length === 0 ? (
+                <div className="text-center py-8 text-muted-foreground">
+                  无新增需求或缺陷
+                </div>
+              ) : (
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>单号</TableHead>
+                      <TableHead>描述</TableHead>
+                      <TableHead>类型</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {diffResult.newContent.map((item) => (
+                      <TableRow key={item.id}>
+                        <TableCell className="font-mono text-sm">
+                          {item.id}
+                        </TableCell>
+                        <TableCell className="text-sm">
+                          {item.description}
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant={item.type === 'requirement' ? 'secondary' : 'destructive'} className="text-xs">
+                            {item.type === 'requirement' ? '需求' : '缺陷'}
                           </Badge>
-                        </td>
-                        <td className="px-4 py-3 text-sm text-muted-foreground max-w-md truncate">
-                          {item.reasonB || item.reasonA || '-'}
-                        </td>
-                      </tr>
+                        </TableCell>
+                      </TableRow>
                     ))}
-                  </tbody>
-                </table>
-              </div>
-            )}
-          </CardContent>
-        </Card>
+                  </TableBody>
+                </Table>
+              )}
+            </CardContent>
+          </Card>
+        </>
       )}
     </div>
   )

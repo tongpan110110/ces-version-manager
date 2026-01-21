@@ -1,0 +1,368 @@
+{
+  "versionLines": [
+    {
+      "versionLine": "25.8",
+      "baseline": "25.8.2",
+      "active": true
+    },
+    {
+      "versionLine": "25.10",
+      "baseline": "25.10.0",
+      "active": true
+    }
+  ],
+  "regions": [
+    {
+      "name": "北京",
+      "area": "domestic",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": true
+    },
+    {
+      "name": "上海",
+      "area": "domestic",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": false
+    },
+    {
+      "name": "广州",
+      "area": "domestic",
+      "version": "25.8.1",
+      "backendReady": false,
+      "frontendReady": false
+    },
+    {
+      "name": "深圳",
+      "area": "domestic",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": true
+    },
+    {
+      "name": "成都",
+      "area": "domestic",
+      "version": "25.8.1",
+      "backendReady": false,
+      "frontendReady": false
+    },
+    {
+      "name": "杭州",
+      "area": "domestic",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": true
+    },
+    {
+      "name": "南京",
+      "area": "domestic",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": true
+    },
+    {
+      "name": "武汉",
+      "area": "domestic",
+      "version": "25.8.1",
+      "backendReady": false,
+      "frontendReady": false
+    },
+    {
+      "name": "西安",
+      "area": "domestic",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": false
+    },
+    {
+      "name": "重庆",
+      "area": "domestic",
+      "version": "25.8.1",
+      "backendReady": false,
+      "frontendReady": false
+    },
+    {
+      "name": "天津",
+      "area": "domestic",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": true
+    },
+    {
+      "name": "苏州",
+      "area": "domestic",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": true
+    },
+    {
+      "name": "青岛",
+      "area": "domestic",
+      "version": "25.8.1",
+      "backendReady": false,
+      "frontendReady": false
+    },
+    {
+      "name": "大连",
+      "area": "domestic",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": true
+    },
+    {
+      "name": "新加坡",
+      "area": "apac",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": true
+    },
+    {
+      "name": "香港",
+      "area": "apac",
+      "version": "25.8.1",
+      "backendReady": true,
+      "frontendReady": false
+    },
+    {
+      "name": "东京",
+      "area": "apac",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": true
+    },
+    {
+      "name": "首尔",
+      "area": "apac",
+      "version": "25.8.1",
+      "backendReady": false,
+      "frontendReady": false
+    },
+    {
+      "name": "悉尼",
+      "area": "apac",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": false
+    },
+    {
+      "name": "迪拜",
+      "area": "apac",
+      "version": "25.8.1",
+      "backendReady": false,
+      "frontendReady": false
+    },
+    {
+      "name": "孟买",
+      "area": "apac",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": true
+    },
+    {
+      "name": "约翰内斯堡",
+      "area": "africa",
+      "version": "25.8.1",
+      "backendReady": false,
+      "frontendReady": false
+    },
+    {
+      "name": "圣保罗",
+      "area": "latam",
+      "version": "25.8.1",
+      "backendReady": false,
+      "frontendReady": false
+    },
+    {
+      "name": "布宜诺斯艾利斯",
+      "area": "latam",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": true
+    },
+    {
+      "name": "墨西哥城",
+      "area": "latam",
+      "version": "25.8.1",
+      "backendReady": false,
+      "frontendReady": false
+    },
+    {
+      "name": "利马",
+      "area": "latam",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": false
+    },
+    {
+      "name": "圣地亚哥",
+      "area": "latam",
+      "version": "25.8.1",
+      "backendReady": false,
+      "frontendReady": false
+    },
+    {
+      "name": "波哥大",
+      "area": "latam",
+      "version": "25.8.2",
+      "backendReady": true,
+      "frontendReady": true
+    }
+  ],
+  "components": [
+    {
+      "name": "CES-Portal",
+      "description": "前端",
+      "type": "frontend"
+    },
+    {
+      "name": "ces-gateway",
+      "description": "网关服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-auth",
+      "description": "认证服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-user",
+      "description": "用户服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-task",
+      "description": "任务服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-workorder",
+      "description": "工单服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-notify",
+      "description": "通知服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-report",
+      "description": "报表服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-file",
+      "description": "文件服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-search",
+      "description": "搜索服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-scheduler",
+      "description": "调度服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-workflow",
+      "description": "工作流服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-log",
+      "description": "日志服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-monitor",
+      "description": "监控服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-config",
+      "description": "配置服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-cache",
+      "description": "缓存服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-message",
+      "description": "消息服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-event",
+      "description": "事件服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-api",
+      "description": "API 服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-job",
+      "description": "作业服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-data",
+      "description": "数据服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-integration",
+      "description": "集成服务",
+      "type": "backend"
+    },
+    {
+      "name": "ces-security",
+      "description": "安全服务",
+      "type": "backend"
+    }
+  ],
+  "plans": [
+    {
+      "version": "25.8.2",
+      "versionLine": "25.8",
+      "type": "Release",
+      "summary": "新增客户管理功能、工单优化",
+      "relatedRequirements": ["REQ-001", "REQ-002"],
+      "relatedBugs": ["BUG-001"],
+      "status": "upgrading",
+      "manifest": {
+        "frontendVersion": "2.8.2",
+        "frontendChangeType": "upgrade",
+        "components": [
+          { "componentName": "CES-Portal", "targetVersion": "2.8.2", "changeType": "upgrade" },
+          { "componentName": "ces-gateway", "targetVersion": "1.2.3", "changeType": "upgrade" },
+          { "componentName": "ces-auth", "targetVersion": "1.1.0", "changeType": "unchanged" },
+          { "componentName": "ces-user", "targetVersion": "2.0.1", "changeType": "upgrade" },
+          { "componentName": "ces-task", "targetVersion": "2.1.0", "changeType": "upgrade" }
+        ]
+      }
+    },
+    {
+      "version": "25.8.1",
+      "versionLine": "25.8",
+      "type": "Release",
+      "summary": "性能优化",
+      "relatedRequirements": ["REQ-003"],
+      "relatedBugs": [],
+      "status": "completed",
+      "manifest": {
+        "frontendVersion": "2.8.1",
+        "frontendChangeType": "upgrade",
+        "components": [
+          { "componentName": "CES-Portal", "targetVersion": "2.8.1", "changeType": "upgrade" },
+          { "componentName": "ces-gateway", "targetVersion": "1.2.0", "changeType": "upgrade" }
+        ]
+      }
+    }
+  ]
+}

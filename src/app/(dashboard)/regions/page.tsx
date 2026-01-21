@@ -1,9 +1,8 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Badge } from '@/components/ui/badge'
 import {
   Select,
   SelectContent,
@@ -11,142 +10,97 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select'
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Switch } from '@/components/ui/switch'
-import { Map, Filter, CheckCircle, AlertCircle, Clock, Edit } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
+import { Input } from '@/components/ui/input'
+import { Map, Filter, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useToast } from '@/hooks/use-toast'
-import { useRegions, usePlans } from '@/hooks/useLocalData'
+import { useRegions, RINGS } from '@/hooks/useLocalData'
+import { useRouter, useSearchParams } from 'next/navigation'
 
 interface Region {
-  id: string
   name: string
   area: string
-  isGray: boolean
-  currentVersion: {
-    plan: {
-      id: string
-      version: string
-      versionLine: string
-      status: string
-    }
-    backendReady: boolean
-    frontendReady: boolean
-  } | null
+  backendVersion: string
+  frontendVersion: string
+  targetVersion: string
+  backendReady: boolean
+  frontendReady: boolean
 }
 
 export default function RegionsPage() {
-  const { regions, baselines, versionLines, updateRegionVersion, loading } = useRegions()
-  const { plans } = usePlans()
-  const [areaFilter, setAreaFilter] = useState('all')
-  const [versionLineFilter, setVersionLineFilter] = useState('all')
+  const { regions, baselines, versionLines, loading } = useRegions()
+  const router = useRouter()
+  const searchParams = useSearchParams()
 
-  // Edit dialog state
-  const [editingRegion, setEditingRegion] = useState<any>(null)
-  const [editDialogOpen, setEditDialogOpen] = useState(false)
-  const [selectedPlanId, setSelectedPlanId] = useState('')
-  const [backendReady, setBackendReady] = useState(false)
-  const [frontendReady, setFrontendReady] = useState(false)
-  const [saving, setSaving] = useState(false)
+  // 从 URL 读取筛选参数
+  const [ringFilter, setRingFilter] = useState(searchParams.get('ring') || 'all')
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '')
 
-  const { toast } = useToast()
-
-  const handleEditRegion = (region: any) => {
-    setEditingRegion(region)
-    setSelectedPlanId(region.currentVersion?.plan.id || '')
-    setBackendReady(region.currentVersion?.backendReady || false)
-    setFrontendReady(region.currentVersion?.frontendReady || false)
-    setEditDialogOpen(true)
+  // 更新 URL 参数
+  const updateURL = (params: Record<string, string>) => {
+    const newParams = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value && value !== 'all') {
+        newParams.set(key, value)
+      }
+    })
+    const newURL = `/regions${newParams.toString() ? '?' + newParams.toString() : ''}`
+    router.replace(newURL)
   }
 
-  const handleSaveRegion = async () => {
-    if (!editingRegion) return
-
-    setSaving(true)
-    try {
-      updateRegionVersion(editingRegion.id, selectedPlanId, backendReady, frontendReady)
-      toast({
-        title: '保存成功',
-        description: `已更新局点 ${editingRegion.name} 的版本信息`,
-      })
-      setEditDialogOpen(false)
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: '保存失败',
-        description: error instanceof Error ? error.message : '保存失败',
-      })
-    } finally {
-      setSaving(false)
+  // 获取局点所属 Ring
+  const getRegionRing = (regionName: string): string | null => {
+    for (const [ringName, regionNames] of Object.entries(RINGS)) {
+      if (regionNames.includes(regionName)) {
+        return ringName
+      }
     }
+    return null
   }
 
-  const getVersionStatus = (region: Region) => {
-    if (!region.currentVersion) return 'unknown'
+  // 获取局点升级状态
+  const getUpgradeStatus = (region: Region): 'upgraded' | 'upgrading' | 'pending' => {
+    const { backendReady, frontendReady } = region
 
-    const versionLine = region.currentVersion.plan.versionLine
-    const baseline = baselines[versionLine]
-
-    if (!baseline) return 'unknown'
-
-    const currentVersion = region.currentVersion.plan.version
-    if (currentVersion === baseline) return 'aligned'
-
-    // Simple comparison - in real app would need proper version comparison
-    const currentParts = currentVersion.split('.').map(Number)
-    const baselineParts = baseline.split('.').map(Number)
-
-    for (let i = 0; i < Math.max(currentParts.length, baselineParts.length); i++) {
-      const c = currentParts[i] || 0
-      const b = baselineParts[i] || 0
-      if (c < b) return i < 2 ? 'behind_many' : 'behind_one'
-      if (c > b) return 'ahead'
-    }
-    return 'aligned'
+    if (backendReady && frontendReady) return 'upgraded'
+    if (backendReady && !frontendReady) return 'upgrading'
+    return 'pending'
   }
 
-  // Version line color mapping
-  const versionLineColors: Record<string, string> = {
-    '25.8': 'border-cyan-500/50 bg-cyan-500/10',
-    '25.10': 'border-purple-500/50 bg-purple-500/10',
-  }
-
-  const statusConfig: Record<string, { color: string; label: string; icon: any }> = {
-    aligned: { color: 'border-success bg-success/10', label: '已对齐', icon: CheckCircle },
-    behind_one: { color: 'border-warning bg-warning/10', label: '略落后', icon: Clock },
-    behind_many: { color: 'border-destructive bg-destructive/10', label: '待升级', icon: AlertCircle },
-    ahead: { color: 'border-primary bg-primary/10', label: '超前', icon: CheckCircle },
-    unknown: { color: 'border-muted bg-muted/10', label: '未知', icon: AlertCircle },
-  }
-
-  const areaNames: Record<string, string> = {
-    domestic: '国内',
-    apac: '亚太/中东',
-    africa: '非洲',
-    latam: '拉美',
-  }
-
+  // 筛选局点
   const filteredRegions = regions.filter(region => {
-    const matchesArea = areaFilter === 'all' || region.area === areaFilter
-    const matchesVersionLine = versionLineFilter === 'all' ||
-      region.currentVersion?.plan.versionLine === versionLineFilter
-    return matchesArea && matchesVersionLine
+    // Ring 环筛选
+    const regionRing = getRegionRing(region.name)
+    const matchesRing = ringFilter === 'all' || regionRing === ringFilter
+
+    // 状态筛选
+    const upgradeStatus = getUpgradeStatus(region)
+    const matchesStatus = statusFilter === 'all' || upgradeStatus === statusFilter
+
+    // 搜索筛选
+    const matchesSearch = !searchQuery || region.name.toLowerCase().includes(searchQuery.toLowerCase())
+
+    return matchesRing && matchesStatus && matchesSearch
   })
 
-  // Group by area
-  const groupedRegions = filteredRegions.reduce((acc, region) => {
-    const area = region.area
-    if (!acc[area]) acc[area] = []
-    acc[area].push(region)
-    return acc
-  }, {} as Record<string, Region[]>)
+  const handleClearFilters = () => {
+    setRingFilter('all')
+    setStatusFilter('all')
+    setSearchQuery('')
+    updateURL({})
+  }
+
+  const hasActiveFilters = ringFilter !== 'all' || statusFilter !== 'all' || searchQuery
+
+  // 处理搜索输入
+  const handleSearchChange = (value: string) => {
+    setSearchQuery(value)
+    updateURL({ ring: ringFilter, status: statusFilter, search: value })
+  }
+
+  // Ring 环选项
+  const ringOptions = ['all', ...Object.keys(RINGS)]
 
   if (loading) {
     return (
@@ -161,248 +115,252 @@ export default function RegionsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold gradient-text">局点版本视图</h1>
+          <h1 className="text-2xl font-bold gradient-text">局点版本</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            多版本线全网局点当前版本状态一览
+            全网局点升级状态总览（按 Ring 环分组）
           </p>
         </div>
-        {versionLines.length > 0 && (
-          <div className="text-right">
-            <p className="text-xs text-muted-foreground">活跃版本线</p>
-            <div className="flex gap-2 mt-1">
-              {versionLines.map((vl: string) => (
-                <Badge key={vl} variant="outline" className="font-mono text-xs">
-                  {vl}.x @ {baselines[vl]}
-                </Badge>
-              ))}
-            </div>
-          </div>
-        )}
       </div>
 
       {/* Filters */}
       <Card className="glass">
         <CardContent className="pt-4">
           <div className="flex items-center gap-3">
-            <Select value={areaFilter} onValueChange={setAreaFilter}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="选择区域" />
+            <Filter className="h-4 w-4 text-muted-foreground" />
+            <div className="relative">
+              <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                placeholder="搜索局点..."
+                value={searchQuery}
+                onChange={(e) => handleSearchChange(e.target.value)}
+                className="pl-8 w-48"
+              />
+            </div>
+            <Select
+              value={ringFilter}
+              onValueChange={(value) => {
+                setRingFilter(value)
+                updateURL({ ring: value, status: statusFilter, search: searchQuery })
+              }}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue placeholder="Ring 环" />
               </SelectTrigger>
               <SelectContent>
-                <SelectItem value="all">全部区域</SelectItem>
-                <SelectItem value="domestic">国内</SelectItem>
-                <SelectItem value="apac">亚太/中东</SelectItem>
-                <SelectItem value="africa">非洲</SelectItem>
-                <SelectItem value="latam">拉美</SelectItem>
-              </SelectContent>
-            </Select>
-
-            <Select value={versionLineFilter} onValueChange={setVersionLineFilter}>
-              <SelectTrigger className="w-48">
-                <SelectValue placeholder="选择版本线" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="all">全部版本线</SelectItem>
-                {versionLines.map((vl: string) => (
-                  <SelectItem key={vl} value={vl}>{vl}.x</SelectItem>
+                <SelectItem value="all">全部局点</SelectItem>
+                {Object.keys(RINGS).map((ring: string) => (
+                  <SelectItem key={ring} value={ring}>{ring}</SelectItem>
                 ))}
               </SelectContent>
             </Select>
 
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => {
+                setStatusFilter(value)
+                updateURL({ ring: ringFilter, status: value, search: searchQuery })
+              }}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue placeholder="状态" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部状态</SelectItem>
+                <SelectItem value="upgraded">已升级</SelectItem>
+                <SelectItem value="upgrading">升级中</SelectItem>
+                <SelectItem value="pending">待升级</SelectItem>
+              </SelectContent>
+            </Select>
+
+            {hasActiveFilters && (
+              <Button variant="outline" size="sm" onClick={handleClearFilters}>
+                清除筛选
+              </Button>
+            )}
+
             {/* Legend */}
-            <div className="flex-1 flex items-center justify-end gap-3 text-xs">
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded bg-cyan-500"></div>
-                <span className="text-muted-foreground">25.8.x</span>
+            <div className="flex-1 flex items-center justify-end gap-4 text-xs">
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">后端</span>
+                <span className="text-success">●</span>
+                <span className="text-muted-foreground">已升级</span>
+                <span className="text-muted-foreground">○</span>
+                <span className="text-muted-foreground">待升级</span>
               </div>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded bg-purple-500"></div>
-                <span className="text-muted-foreground">25.10.x</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded bg-success"></div>
-                <span className="text-muted-foreground">已对齐</span>
-              </div>
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 rounded bg-warning"></div>
-                <span className="text-muted-foreground">落后</span>
+              <div className="flex items-center gap-1.5">
+                <span className="text-muted-foreground">前端</span>
+                <span className="text-success">●</span>
+                <span className="text-muted-foreground">已升级</span>
+                <span className="text-muted-foreground">○</span>
+                <span className="text-muted-foreground">待升级</span>
               </div>
             </div>
           </div>
         </CardContent>
       </Card>
 
-      {/* Region Cards */}
-      {(Object.entries(groupedRegions) as [string, any[]][]).map(([area, areaRegions]) => (
-        <div key={area}>
-          <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
-            <Map className="h-4 w-4 text-primary" />
-            {areaNames[area] || area}
-            <span className="text-xs text-muted-foreground font-normal">
-              ({areaRegions.length} 个局点)
-            </span>
-          </h2>
+      {/* Region Cards by Ring */}
+      {filteredRegions.length === 0 ? (
+        <Card className="glass">
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground mb-4">
+              {hasActiveFilters ? '暂无符合条件的局点' : '暂无局点数据'}
+            </p>
+            {hasActiveFilters && (
+              <Button variant="outline" onClick={handleClearFilters}>
+                清除筛选条件
+              </Button>
+            )}
+          </CardContent>
+        </Card>
+      ) : (
+        <>
+          {/* Ring 0 - Ring 4 */}
+          {Object.entries(RINGS).map(([ringName, regionNames]) => {
+            const ringRegions = filteredRegions.filter(r => regionNames.includes(r.name))
+            if (ringRegions.length === 0) return null
 
-          <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
-            {areaRegions.map((region) => {
-              const status = getVersionStatus(region)
-              const config = statusConfig[status]
-              const StatusIcon = config.icon
-              const versionLine = region.currentVersion?.plan.versionLine
-              const versionLineColor = versionLine ? versionLineColors[versionLine] : ''
+            return (
+              <div key={ringName}>
+                <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+                  <Map className="h-4 w-4 text-primary" />
+                  {ringName}
+                  <span className="text-xs text-muted-foreground font-normal">
+                    ({ringRegions.length} 个局点)
+                  </span>
+                </h2>
 
-              return (
-                <Card
-                  key={region.id}
-                  className={cn(
-                    'transition-all hover:shadow-lg border-l-4 group',
-                    versionLineColor
-                  )}
-                >
-                  <CardContent className="p-3">
-                    <div className="flex items-start justify-between mb-2">
-                      <div className="flex-1">
-                        <h3 className="text-sm font-medium truncate">{region.name}</h3>
-                      </div>
-                      <div className="flex items-center gap-1">
-                        <StatusIcon className={cn(
-                          'h-3 w-3',
-                          status === 'aligned' && 'text-success',
-                          status === 'behind_one' && 'text-warning',
-                          status === 'behind_many' && 'text-destructive',
-                          status === 'ahead' && 'text-primary'
-                        )} />
-                        <Button
-                          size="sm"
-                          variant="ghost"
-                          className="h-5 w-5 p-0 opacity-0 group-hover:opacity-100 transition-opacity"
-                          onClick={() => handleEditRegion(region)}
-                        >
-                          <Edit className="h-2.5 w-2.5" />
-                        </Button>
-                      </div>
-                    </div>
+                <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  {ringRegions.map((region) => {
+                    const { backendReady, frontendReady, backendVersion, frontendVersion, targetVersion } = region
 
-                    {region.currentVersion ? (
-                      <>
-                        <p className="text-xl font-mono font-bold text-primary mb-1">
-                          {region.currentVersion.plan.version}
-                        </p>
-                        {versionLine && baselines[versionLine] && (
-                          <p className="text-[10px] text-muted-foreground mb-1.5">
-                            目标: <span className="font-mono font-semibold">{baselines[versionLine]}</span>
-                          </p>
+                    return (
+                      <Card
+                        key={region.name}
+                        className={cn(
+                          "hover:border-primary/50 transition-all",
+                          backendReady && frontendReady && "border-success bg-success/5"
                         )}
-                        <div className="flex gap-1">
-                          <Badge
-                            variant={region.currentVersion.backendReady ? 'success' : 'outline'}
-                            className="text-[9px] px-1.5 py-0"
-                          >
-                            BE {region.currentVersion.backendReady ? 'OK' : '-'}
-                          </Badge>
-                          <Badge
-                            variant={region.currentVersion.frontendReady ? 'success' : 'outline'}
-                            className="text-[9px] px-1.5 py-0"
-                          >
-                            FE {region.currentVersion.frontendReady ? 'OK' : '-'}
-                          </Badge>
-                        </div>
-                      </>
-                    ) : (
-                      <p className="text-muted-foreground text-xs">未设置版本</p>
-                    )}
-                  </CardContent>
-                </Card>
-              )
-            })}
-          </div>
-        </div>
-      ))}
+                      >
+                        <CardContent className="p-3">
+                          {/* 局点名称 */}
+                          <h3 className="text-sm font-medium mb-3 text-center">{region.name}</h3>
 
-      {/* Edit Region Dialog */}
-      <Dialog open={editDialogOpen} onOpenChange={setEditDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>编辑局点版本 - {editingRegion?.name}</DialogTitle>
-          </DialogHeader>
+                          {/* 分隔线 */}
+                          <div className="border-b border-border/50 mb-3"></div>
 
-          <div className="space-y-4 py-4">
-            <div className="space-y-2">
-              <Label>选择版本</Label>
-              <Select value={selectedPlanId} onValueChange={setSelectedPlanId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="选择版本计划" />
-                </SelectTrigger>
-                <SelectContent>
-                  {plans && plans.length > 0 ? (
-                    plans.map(plan => (
-                      <SelectItem key={plan.id} value={plan.id}>
-                        <div className="flex items-center gap-2">
-                          <span className="font-mono">{plan.version}</span>
-                          <Badge variant="outline" className="text-xs">
-                            {plan.versionLine}.x
-                          </Badge>
-                          <Badge variant={plan.status === 'released' ? 'success' : 'outline'} className="text-xs">
-                            {plan.status}
-                          </Badge>
-                        </div>
-                      </SelectItem>
-                    ))
-                  ) : (
-                    <SelectItem value="no-plans" disabled>
-                      暂无可用版本计划
-                    </SelectItem>
-                  )}
-                </SelectContent>
-              </Select>
-            </div>
+                          {/* 前端 */}
+                          <div className="mb-3">
+                            <div className="flex items-center gap-2 text-xs mb-1">
+                              <span className="text-muted-foreground">前端</span>
+                              <span className={frontendReady ? 'text-success' : 'text-muted-foreground'}>
+                                {frontendReady ? '●' : '○'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-mono">
+                              <span className="text-foreground">{frontendVersion || '未设置'}</span>
+                              <span className="text-muted-foreground">→</span>
+                              <span className="text-foreground">{targetVersion || '25.10'}</span>
+                            </div>
+                          </div>
 
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>后端就绪</Label>
-                  <p className="text-xs text-muted-foreground">
-                    标记后端组件已部署完成
-                  </p>
+                          {/* 后端 */}
+                          <div>
+                            <div className="flex items-center gap-2 text-xs mb-1">
+                              <span className="text-muted-foreground">后端</span>
+                              <span className={backendReady ? 'text-success' : 'text-muted-foreground'}>
+                                {backendReady ? '●' : '○'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-mono">
+                              <span className="text-foreground">{backendVersion || '未设置'}</span>
+                              <span className="text-muted-foreground">→</span>
+                              <span className="text-foreground">{targetVersion || '25.10'}</span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
                 </div>
-                <Switch
-                  checked={backendReady}
-                  onCheckedChange={setBackendReady}
-                />
               </div>
+            )
+          })}
 
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label>前端就绪</Label>
-                  <p className="text-xs text-muted-foreground">
-                    标记前端已部署完成
-                  </p>
+          {/* 未分配的局点 */}
+          {(() => {
+            const unassignedRegions = filteredRegions.filter(region => {
+              return !Object.values(RINGS).some(names => names.includes(region.name))
+            })
+
+            return unassignedRegions.length > 0 ? (
+              <div>
+                <h2 className="text-base font-semibold mb-3 flex items-center gap-2">
+                  <Map className="h-4 w-4 text-muted-foreground" />
+                  未分配 Ring
+                  <span className="text-xs text-muted-foreground font-normal">
+                    ({unassignedRegions.length} 个局点)
+                  </span>
+                </h2>
+
+                <div className="grid gap-3 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">
+                  {unassignedRegions.map((region) => {
+                    const { backendReady, frontendReady, backendVersion, frontendVersion, targetVersion } = region
+
+                    return (
+                      <Card
+                        key={region.name}
+                        className={cn(
+                          "hover:border-primary/50 transition-all",
+                          backendReady && frontendReady && "border-success bg-success/5"
+                        )}
+                      >
+                        <CardContent className="p-3">
+                          {/* 局点名称 */}
+                          <h3 className="text-sm font-medium mb-3 text-center">{region.name}</h3>
+
+                          {/* 分隔线 */}
+                          <div className="border-b border-border/50 mb-3"></div>
+
+                          {/* 前端 */}
+                          <div className="mb-3">
+                            <div className="flex items-center gap-2 text-xs mb-1">
+                              <span className="text-muted-foreground">前端</span>
+                              <span className={frontendReady ? 'text-success' : 'text-muted-foreground'}>
+                                {frontendReady ? '●' : '○'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-mono">
+                              <span className="text-foreground">{frontendVersion || '未设置'}</span>
+                              <span className="text-muted-foreground">→</span>
+                              <span className="text-foreground">{targetVersion || '25.10'}</span>
+                            </div>
+                          </div>
+
+                          {/* 后端 */}
+                          <div>
+                            <div className="flex items-center gap-2 text-xs mb-1">
+                              <span className="text-muted-foreground">后端</span>
+                              <span className={backendReady ? 'text-success' : 'text-muted-foreground'}>
+                                {backendReady ? '●' : '○'}
+                              </span>
+                            </div>
+                            <div className="flex items-center gap-2 text-xs font-mono">
+                              <span className="text-foreground">{backendVersion || '未设置'}</span>
+                              <span className="text-muted-foreground">→</span>
+                              <span className="text-foreground">{targetVersion || '25.10'}</span>
+                            </div>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    )
+                  })}
                 </div>
-                <Switch
-                  checked={frontendReady}
-                  onCheckedChange={setFrontendReady}
-                />
               </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-4">
-              <Button
-                variant="outline"
-                onClick={() => setEditDialogOpen(false)}
-                disabled={saving}
-              >
-                取消
-              </Button>
-              <Button
-                onClick={handleSaveRegion}
-                disabled={saving || !selectedPlanId}
-              >
-                {saving ? '保存中...' : '保存'}
-              </Button>
-            </div>
-          </div>
-        </DialogContent>
-      </Dialog>
+            ) : null
+          })()}
+        </>
+      )}
     </div>
   )
 }

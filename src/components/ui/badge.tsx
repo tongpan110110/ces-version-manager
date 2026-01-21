@@ -24,12 +24,12 @@ const badgeVariants = cva(
           'border-gray-500/50 bg-gray-500/20 text-gray-300',
         testing:
           'border-yellow-500/50 bg-yellow-500/20 text-yellow-300',
-        ready:
-          'border-blue-500/50 bg-blue-500/20 text-blue-300',
         released:
           'border-green-500/50 bg-green-500/20 text-green-300',
-        deprecated:
-          'border-red-500/50 bg-red-500/20 text-red-300',
+        upgrading:
+          'border-blue-500/50 bg-blue-500/20 text-blue-300',
+        completed:
+          'border-emerald-500/50 bg-emerald-500/20 text-emerald-300',
       },
     },
     defaultVariants: {

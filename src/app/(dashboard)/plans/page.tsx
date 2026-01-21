@@ -1,8 +1,8 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, useMemo } from 'react'
 import Link from 'next/link'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
@@ -18,28 +18,19 @@ import {
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
-import {
-  Package,
-  Plus,
-  Search,
-  Filter,
-  ChevronRight,
-  Calendar,
-  Trash2,
-} from 'lucide-react'
-import { formatDate } from '@/lib/utils'
+import { Plus, Search, ChevronRight, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { useRouter } from 'next/navigation'
+import { useRouter, useSearchParams } from 'next/navigation'
 import { usePlans } from '@/hooks/useLocalData'
 
 interface Plan {
   id: string
   version: string
+  versionLine: string
   type: string
   status: string
   summary: string
@@ -47,37 +38,98 @@ interface Plan {
   relatedBugs: string
   createdAt: string
   updatedAt: string
-  manifest: {
-    frontendVersion: string
-    frontendChangeType: string
-  } | null
-  _count: {
-    regionVersions: number
-  }
 }
 
 export default function PlansPage() {
   const { plans, createPlan, deletePlan, loading } = usePlans()
-  const [search, setSearch] = useState('')
-  const [statusFilter, setStatusFilter] = useState('all')
-  const [typeFilter, setTypeFilter] = useState('all')
+  const router = useRouter()
+  const searchParams = useSearchParams()
+  const { toast } = useToast()
 
-  // Create plan dialog
+  // 从 URL 读取筛选参数
+  const [search, setSearch] = useState(searchParams.get('search') || '')
+  const [versionLineFilter, setVersionLineFilter] = useState(searchParams.get('versionLine') || 'all')
+  const [statusFilter, setStatusFilter] = useState(searchParams.get('status') || 'all')
+  const [typeFilter, setTypeFilter] = useState(searchParams.get('type') || 'all')
+
+  // 新建计划弹窗
   const [createDialogOpen, setCreateDialogOpen] = useState(false)
   const [creating, setCreating] = useState(false)
   const [newVersion, setNewVersion] = useState('')
-  const [newType, setNewType] = useState('Release')
+  const [newType, setNewType] = useState('Feature Release')
   const [newSummary, setNewSummary] = useState('')
   const [newRequirements, setNewRequirements] = useState('')
   const [newBugs, setNewBugs] = useState('')
 
-  // Delete plan dialog
+  // 删除确认弹窗
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
-  const [deleting, setDeleting] = useState(false)
-  const [planToDelete, setPlanToDelete] = useState<any>(null)
+  const [planToDelete, setPlanToDelete] = useState<Plan | null>(null)
 
-  const { toast } = useToast()
-  const router = useRouter()
+  // 版本线选项（从 localStorage 读取）
+  const [versionLines, setVersionLines] = useState<string[]>([])
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const saved = localStorage.getItem('settings_versionLines')
+      if (saved) {
+        const vls = JSON.parse(saved)
+        setVersionLines(vls.map((vl: any) => vl.versionLine))
+      }
+    }
+  }, [])
+
+  // 更新 URL 参数
+  const updateURL = (params: Record<string, string>) => {
+    const newParams = new URLSearchParams()
+    Object.entries(params).forEach(([key, value]) => {
+      if (value && value !== 'all') {
+        newParams.set(key, value)
+      }
+    })
+    const newURL = `/plans${newParams.toString() ? '?' + newParams.toString() : ''}`
+    router.replace(newURL)
+  }
+
+  // 筛选和排序
+  const filteredPlans = useMemo(() => {
+    let result = [...plans]
+
+    // 搜索筛选
+    if (search) {
+      result = result.filter(plan =>
+        plan.version.includes(search) || plan.summary.includes(search)
+      )
+    }
+
+    // 版本线筛选
+    if (versionLineFilter !== 'all') {
+      result = result.filter(plan => plan.versionLine === versionLineFilter)
+    }
+
+    // 状态筛选
+    if (statusFilter !== 'all') {
+      result = result.filter(plan => plan.status === statusFilter)
+    }
+
+    // 类型筛选
+    if (typeFilter !== 'all') {
+      result = result.filter(plan => plan.type === typeFilter)
+    }
+
+    // 按创建时间倒序排序
+    result.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+
+    return result
+  }, [plans, search, versionLineFilter, statusFilter, typeFilter])
+
+  // 状态映射（新术语）
+  const statusMap: Record<string, { label: string; variant: any }> = {
+    draft: { label: '开发中', variant: 'draft' },
+    testing: { label: '测试中', variant: 'testing' },
+    released: { label: '研发出包', variant: 'released' },
+    upgrading: { label: '升级中', variant: 'upgrading' },
+    completed: { label: '已完成', variant: 'completed' },
+  }
 
   const handleCreatePlan = async () => {
     if (!newVersion || !newSummary) {
@@ -91,7 +143,7 @@ export default function PlansPage() {
 
     setCreating(true)
     try {
-      // Extract version line from version
+      // 从版本号提取版本线
       const versionParts = newVersion.split('.')
       const versionLine = `${versionParts[0]}.${versionParts[1]}`
 
@@ -110,13 +162,13 @@ export default function PlansPage() {
         description: `版本计划 ${newVersion} 已创建`,
       })
       setCreateDialogOpen(false)
-      // Reset form
+      // 重置表单
       setNewVersion('')
-      setNewType('Release')
+      setNewType('Feature Release')
       setNewSummary('')
       setNewRequirements('')
       setNewBugs('')
-      // Navigate to the new plan
+      // 跳转到详情页
       router.push(`/plans/${newPlan.id}`)
     } catch (error) {
       toast({
@@ -129,51 +181,35 @@ export default function PlansPage() {
     }
   }
 
-  const handleDeletePlan = async () => {
-    if (!planToDelete) return
+  const handleClearFilters = () => {
+    setSearch('')
+    setVersionLineFilter('all')
+    setStatusFilter('all')
+    setTypeFilter('all')
+    updateURL({})
+  }
 
-    setDeleting(true)
-    try {
+  const hasActiveFilters = search || versionLineFilter !== 'all' || statusFilter !== 'all' || typeFilter !== 'all'
+
+  // 删除计划
+  const handleDeleteClick = (plan: Plan) => {
+    setPlanToDelete(plan)
+    setDeleteDialogOpen(true)
+  }
+
+  const handleConfirmDelete = () => {
+    if (planToDelete) {
       deletePlan(planToDelete.id)
+
       toast({
         title: '删除成功',
-        description: `版本计划 ${planToDelete.version} 已标记为废弃`,
+        description: `版本计划 ${planToDelete.version} 已删除`,
       })
+
       setDeleteDialogOpen(false)
       setPlanToDelete(null)
-    } catch (error) {
-      toast({
-        variant: 'destructive',
-        title: '删除失败',
-        description: error instanceof Error ? error.message : '删除失败',
-      })
-    } finally {
-      setDeleting(false)
     }
   }
-
-  const statusMap: Record<string, { label: string; variant: any }> = {
-    draft: { label: '草稿', variant: 'draft' },
-    testing: { label: '待测试', variant: 'testing' },
-    ready: { label: '待发布', variant: 'ready' },
-    released: { label: '已发布', variant: 'released' },
-    deprecated: { label: '已废弃', variant: 'deprecated' },
-  }
-
-  const filteredPlans = plans.filter(plan => {
-    // Status filter
-    if (statusFilter !== 'all' && plan.status !== statusFilter) return false
-    // Type filter
-    if (typeFilter !== 'all' && plan.type !== typeFilter) return false
-    // Search filter
-    if (search && !plan.version.includes(search) && !plan.summary.includes(search)) return false
-    return true
-  }).map(plan => ({
-    ...plan,
-    // Add mock data for manifest and _count
-    manifest: null,
-    _count: { regionVersions: 0 }
-  }))
 
   return (
     <div className="space-y-4">
@@ -182,7 +218,7 @@ export default function PlansPage() {
         <div>
           <h1 className="text-2xl font-bold gradient-text">发布计划</h1>
           <p className="text-sm text-muted-foreground mt-0.5">
-            管理所有版本发布计划与交付套件
+            管理所有版本发布计划
           </p>
         </div>
         <Button className="gap-2" onClick={() => setCreateDialogOpen(true)}>
@@ -191,7 +227,7 @@ export default function PlansPage() {
         </Button>
       </div>
 
-      {/* Create Plan Dialog */}
+      {/* 新建计划弹窗 */}
       <Dialog open={createDialogOpen} onOpenChange={setCreateDialogOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -219,8 +255,9 @@ export default function PlansPage() {
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Release">需求版 (Release)</SelectItem>
-                    <SelectItem value="Patch">补丁版 (Patch)</SelectItem>
+                    <SelectItem value="Feature Release">Feature Release</SelectItem>
+                    <SelectItem value="Update Release">Update Release</SelectItem>
+                    <SelectItem value="Patch">Patch</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
@@ -273,41 +310,7 @@ export default function PlansPage() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete Plan Dialog */}
-      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>确认删除计划</DialogTitle>
-            <DialogDescription>
-              确定要删除版本计划 <span className="font-mono font-semibold">{planToDelete?.version}</span> 吗？
-              <br />
-              此操作将把计划标记为&quot;已废弃&quot;状态，不会物理删除数据。
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              variant="outline"
-              onClick={() => {
-                setDeleteDialogOpen(false)
-                setPlanToDelete(null)
-              }}
-              disabled={deleting}
-            >
-              取消
-            </Button>
-            <Button
-              variant="destructive"
-              onClick={handleDeletePlan}
-              disabled={deleting}
-            >
-              <Trash2 className="h-4 w-4 mr-2" />
-              {deleting ? '删除中...' : '确认删除'}
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-
-      {/* Filters */}
+      {/* 筛选区 */}
       <Card className="glass">
         <CardContent className="pt-4">
           <div className="flex gap-3">
@@ -316,106 +319,127 @@ export default function PlansPage() {
               <Input
                 placeholder="搜索版本号或描述..."
                 value={search}
-                onChange={(e) => setSearch(e.target.value)}
+                onChange={(e) => {
+                  setSearch(e.target.value)
+                  updateURL({ search: e.target.value, versionLine: versionLineFilter, status: statusFilter, type: typeFilter })
+                }}
                 className="pl-9"
               />
             </div>
-            <Select value={statusFilter} onValueChange={setStatusFilter}>
-              <SelectTrigger className="w-40">
+            <Select
+              value={versionLineFilter}
+              onValueChange={(value) => {
+                setVersionLineFilter(value)
+                updateURL({ search, versionLine: value, status: statusFilter, type: typeFilter })
+              }}
+            >
+              <SelectTrigger className="w-36">
+                <SelectValue placeholder="版本线" />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">全部版本线</SelectItem>
+                {versionLines.map(vl => (
+                  <SelectItem key={vl} value={vl}>{vl}.x</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+            <Select
+              value={statusFilter}
+              onValueChange={(value) => {
+                setStatusFilter(value)
+                updateURL({ search, versionLine: versionLineFilter, status: value, type: typeFilter })
+              }}
+            >
+              <SelectTrigger className="w-36">
                 <SelectValue placeholder="状态" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全部状态</SelectItem>
-                <SelectItem value="draft">草稿</SelectItem>
-                <SelectItem value="testing">待测试</SelectItem>
-                <SelectItem value="ready">待发布</SelectItem>
-                <SelectItem value="released">已发布</SelectItem>
-                <SelectItem value="deprecated">已废弃</SelectItem>
+                <SelectItem value="draft">开发中</SelectItem>
+                <SelectItem value="testing">测试中</SelectItem>
+                <SelectItem value="released">研发出包</SelectItem>
+                <SelectItem value="upgrading">升级中</SelectItem>
+                <SelectItem value="completed">已完成</SelectItem>
               </SelectContent>
             </Select>
-            <Select value={typeFilter} onValueChange={setTypeFilter}>
-              <SelectTrigger className="w-40">
+            <Select
+              value={typeFilter}
+              onValueChange={(value) => {
+                setTypeFilter(value)
+                updateURL({ search, versionLine: versionLineFilter, status: statusFilter, type: value })
+              }}
+            >
+              <SelectTrigger className="w-36">
                 <SelectValue placeholder="类型" />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全部类型</SelectItem>
-                <SelectItem value="Release">需求版</SelectItem>
-                <SelectItem value="Patch">补丁版</SelectItem>
+                <SelectItem value="Feature Release">Feature Release</SelectItem>
+                <SelectItem value="Update Release">Update Release</SelectItem>
+                <SelectItem value="Patch">Patch</SelectItem>
               </SelectContent>
             </Select>
-            <Button variant="outline" onClick={() => {}}>
-              <Filter className="h-4 w-4 mr-2" />
-              筛选
-            </Button>
           </div>
         </CardContent>
       </Card>
 
-      {/* Plans List */}
+      {/* 计划列表 */}
       {loading ? (
         <div className="text-center py-8 text-muted-foreground">加载中...</div>
       ) : filteredPlans.length === 0 ? (
-        <div className="text-center py-8 text-muted-foreground">
-          暂无发布计划
-        </div>
+        <Card className="glass">
+          <CardContent className="py-12 text-center">
+            <p className="text-muted-foreground mb-4">
+              {hasActiveFilters ? '暂无符合条件的发布计划' : '暂无发布计划'}
+            </p>
+            {hasActiveFilters && (
+              <Button variant="outline" onClick={handleClearFilters}>
+                清除筛选条件
+              </Button>
+            )}
+          </CardContent>
+        </Card>
       ) : (
         <div className="space-y-3">
           {filteredPlans.map((plan) => (
-            <Card key={plan.id} className="glass hover:border-primary/50 transition-all group relative">
+            <Card key={plan.id} className="glass hover:border-primary/50 transition-all relative">
+              <Button
+                variant="ghost"
+                size="icon"
+                className="absolute top-3 right-3 h-8 w-8 text-muted-foreground hover:text-destructive z-10"
+                onClick={(e) => {
+                  e.preventDefault()
+                  e.stopPropagation()
+                  handleDeleteClick(plan)
+                }}
+              >
+                <Trash2 className="h-4 w-4" />
+              </Button>
               <Link href={`/plans/${plan.id}`}>
-                <CardContent className="p-4 cursor-pointer">
+                <CardContent className="p-4 pr-12 cursor-pointer">
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center gap-4">
+                    <div className="flex items-center gap-4 flex-1">
+                      <span className="text-lg font-mono font-bold text-primary">
+                        {plan.version}
+                      </span>
                       <div className="flex items-center gap-2">
-                        <Package className="h-4 w-4 text-primary" />
-                        <span className="text-lg font-mono font-bold text-primary">
-                          {plan.version}
-                        </span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        <Badge variant={plan.type === 'Patch' ? 'warning' : 'secondary'} className="text-xs">
-                          {plan.type === 'Release' ? '需求版' : '补丁版'}
+                        <Badge variant={
+                          plan.type === 'Patch' ? 'warning' :
+                          plan.type === 'Feature Release' ? 'default' :
+                          'outline'
+                        } className="text-xs">
+                          {plan.type}
                         </Badge>
                         <Badge variant={statusMap[plan.status]?.variant || 'outline'} className="text-xs">
                           {statusMap[plan.status]?.label || plan.status}
                         </Badge>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2">
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        className="h-7 w-7 opacity-0 group-hover:opacity-100 transition-opacity"
-                        onClick={(e) => {
-                          e.preventDefault()
-                          e.stopPropagation()
-                          setPlanToDelete(plan)
-                          setDeleteDialogOpen(true)
-                        }}
-                      >
-                        <Trash2 className="h-3 w-3 text-destructive" />
-                      </Button>
-                      <ChevronRight className="h-4 w-4 text-muted-foreground" />
-                    </div>
+                    <ChevronRight className="h-4 w-4 text-muted-foreground" />
                   </div>
 
                   <div className="mt-2 text-sm text-muted-foreground">
                     {plan.summary}
-                  </div>
-
-                  <div className="mt-2 flex items-center gap-4 text-xs text-muted-foreground">
-                    {plan.manifest && (
-                      <div>
-                        前端: <span className="text-foreground">{plan.manifest.frontendVersion}</span>
-                      </div>
-                    )}
-                    <div>
-                      覆盖局点: <span className="text-foreground">{plan._count.regionVersions}</span>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <Calendar className="h-3 w-3" />
-                      {formatDate(plan.updatedAt)}
-                    </div>
                   </div>
                 </CardContent>
               </Link>
@@ -423,6 +447,30 @@ export default function PlansPage() {
           ))}
         </div>
       )}
+
+      {/* 删除确认对话框 */}
+      <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>确认删除</DialogTitle>
+          </DialogHeader>
+          <div className="py-4">
+            <p className="text-sm text-muted-foreground">
+              确定要删除版本计划 <span className="font-mono font-semibold text-foreground">
+                {planToDelete?.version}
+              </span> 吗？此操作无法撤销。
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteDialogOpen(false)}>
+              取消
+            </Button>
+            <Button variant="destructive" onClick={handleConfirmDelete}>
+              删除
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
