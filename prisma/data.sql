@@ -1,6 +1,10 @@
 -- CES 版本管理系统 - 完整数据导入 SQL
 -- MySQL 8.0 兼容版本
 
+-- 设置字符集（Windows 必须添加此行）
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
+
 USE ces_version;
 
 -- 1. 版本线数据
@@ -136,3 +140,6 @@ INSERT INTO plan_components (plan_id, component_name, component_type, current_ve
 -- 10. 延期原因记录
 INSERT INTO plan_delays (plan_id, delay_key, delay_type, delay_reason, owner, recorded_at) VALUES
 ('1768445696762', 'package', '需求变更', 'xxxxx', 'xxx', '2026-01-19 06:41:03');
+
+-- 恢复外键检查
+SET FOREIGN_KEY_CHECKS = 1;
