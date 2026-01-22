@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/db'
+import { query, queryOne } from '@/lib/db'
 
 // GET /api/manifests/[planId]/diff?compareTo=xxx - Compare two manifests
 export async function GET(
@@ -18,33 +18,50 @@ export async function GET(
       )
     }
 
-    // Get both manifests
-    const [manifestA, manifestB] = await Promise.all([
-      prisma.manifest.findUnique({
-        where: { planId },
-        include: {
-          plan: true,
-          components: {
-            orderBy: { componentName: 'asc' },
-          },
-        },
-      }),
-      prisma.manifest.findUnique({
-        where: { planId: compareToId },
-        include: {
-          plan: true,
-          components: {
-            orderBy: { componentName: 'asc' },
-          },
-        },
-      }),
+    // Get both manifests with their plans and components in parallel
+    const [manifestARaw, manifestBRaw] = await Promise.all([
+      queryOne<any>(
+        `SELECT * FROM manifests WHERE plan_id = ?`,
+        [planId]
+      ),
+      queryOne<any>(
+        `SELECT * FROM manifests WHERE plan_id = ?`,
+        [compareToId]
+      ),
     ])
 
-    if (!manifestA || !manifestB) {
+    if (!manifestARaw || !manifestBRaw) {
       return NextResponse.json(
         { success: false, error: '交付套件不存在' },
         { status: 404 }
       )
+    }
+
+    // Get plans and components in parallel
+    const [planA, planB, componentsA, componentsB] = await Promise.all([
+      queryOne<any>(`SELECT * FROM plans WHERE id = ?`, [manifestARaw.plan_id]),
+      queryOne<any>(`SELECT * FROM plans WHERE id = ?`, [manifestBRaw.plan_id]),
+      query<any>(
+        `SELECT * FROM manifest_components WHERE manifest_id = ? ORDER BY component_name ASC`,
+        [manifestARaw.id]
+      ),
+      query<any>(
+        `SELECT * FROM manifest_components WHERE manifest_id = ? ORDER BY component_name ASC`,
+        [manifestBRaw.id]
+      ),
+    ])
+
+    // Build full manifest objects with relations
+    const manifestA = {
+      ...manifestARaw,
+      plan: planA,
+      components: componentsA,
+    }
+
+    const manifestB = {
+      ...manifestBRaw,
+      plan: planB,
+      components: componentsB,
     }
 
     // Build diff result
@@ -61,47 +78,47 @@ export async function GET(
     }
 
     // Build component map for comparison
-    const componentsA = new Map(
-      manifestA.components.map(c => [c.componentName, c])
+    const componentsAMap = new Map(
+      componentsA.map(c => [c.component_name, c])
     )
-    const componentsB = new Map(
-      manifestB.components.map(c => [c.componentName, c])
+    const componentsBMap = new Map(
+      componentsB.map(c => [c.component_name, c])
     )
 
     // Get all unique component names
     const allComponents = new Set([
-      ...Array.from(componentsA.keys()),
-      ...Array.from(componentsB.keys()),
+      ...Array.from(componentsAMap.keys()),
+      ...Array.from(componentsBMap.keys()),
     ])
 
     for (const name of Array.from(allComponents)) {
-      const compA = componentsA.get(name)
-      const compB = componentsB.get(name)
+      const compA = componentsAMap.get(name)
+      const compB = componentsBMap.get(name)
 
       if (!compA && compB) {
         diff.push({
           componentName: name,
           versionA: '-',
-          versionB: compB.targetVersion,
+          versionB: compB.target_version,
           changeType: 'added',
-          reasonB: compB.changeReason,
+          reasonB: compB.change_reason,
         })
       } else if (compA && !compB) {
         diff.push({
           componentName: name,
-          versionA: compA.targetVersion,
+          versionA: compA.target_version,
           versionB: '-',
           changeType: 'removed',
-          reasonA: compA.changeReason,
+          reasonA: compA.change_reason,
         })
-      } else if (compA && compB && compA.targetVersion !== compB.targetVersion) {
+      } else if (compA && compB && compA.target_version !== compB.target_version) {
         diff.push({
           componentName: name,
-          versionA: compA.targetVersion,
-          versionB: compB.targetVersion,
+          versionA: compA.target_version,
+          versionB: compB.target_version,
           changeType: 'changed',
-          reasonA: compA.changeReason,
-          reasonB: compB.changeReason,
+          reasonA: compA.change_reason,
+          reasonB: compB.change_reason,
         })
       }
     }
@@ -110,12 +127,12 @@ export async function GET(
       success: true,
       data: {
         planA: {
-          id: manifestA.plan.id,
-          version: manifestA.plan.version,
+          id: planA.id,
+          version: planA.version,
         },
         planB: {
-          id: manifestB.plan.id,
-          version: manifestB.plan.version,
+          id: planB.id,
+          version: planB.version,
         },
         diff,
         totalChanges: diff.length,

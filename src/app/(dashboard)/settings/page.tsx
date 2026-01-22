@@ -297,7 +297,7 @@ export default function SettingsPage() {
       setRegionForm(item)
     } else {
       setEditingRegion(null)
-      setRegionForm({ name: '', area: '', version: '', backendReady: false, frontendReady: false })
+      setRegionForm({ name: '', area: '', backendVersion: '', frontendVersion: '', targetVersion: '', backendReady: false, frontendReady: false })
     }
     setRegionDialogOpen(true)
   }

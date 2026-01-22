@@ -68,12 +68,15 @@ interface Component {
   enabled: boolean
 }
 
-type TimelineKey = 'devStart' | 'testStart' | 'package'
+type TimelineKey = 'devStart' | 'testBetaT1' | 'testBetaT2' | 'testBetaT3Gamma' | 'package'
 type DelayKey = TimelineKey | 'upgradeWindow'
 
 interface PlanTimeline {
   devStart?: { planned?: string; actual?: string }
   testStart?: { planned?: string; actual?: string }
+  testBetaT1?: { planned?: string; actual?: string }
+  testBetaT2?: { planned?: string; actual?: string }
+  testBetaT3Gamma?: { planned?: string; actual?: string }
   package?: { planned?: string; actual?: string }
   upgradeWindow?: {
     plannedStart?: string
@@ -137,7 +140,13 @@ export default function PlanDetailPage() {
   const [blockers, setBlockers] = useState<BlockerItem[]>([])
   const [blockerDialogOpen, setBlockerDialogOpen] = useState(false)
   const [editingBlockerId, setEditingBlockerId] = useState<string | null>(null)
-  const [blockerForm, setBlockerForm] = useState({
+  const [blockerForm, setBlockerForm] = useState<{
+    title: string
+    severity: 'P0' | 'P1' | 'P2' | 'P3'
+    status: 'open' | 'in_progress' | 'resolved'
+    owner: string
+    note: string
+  }>({
     title: '',
     severity: 'P1',
     status: 'open',
@@ -159,6 +168,7 @@ export default function PlanDetailPage() {
     return {
       devStart: { planned: '2026-01-09', actual: '2026-01-09' },
       testStart: { planned: '2026-02-14', actual: '2026-02-14' },
+      testBetaT3Gamma: { planned: '2026-02-14', actual: '2026-02-14' },
       package: { planned: '2026-02-28', actual: '2026-02-28' },
       upgradeWindow: {
         plannedStart: '2026-02-27',
@@ -167,6 +177,16 @@ export default function PlanDetailPage() {
         actualEnd: '2026-04-30',
       },
     }
+  }
+
+  const normalizeTimeline = (value: PlanTimeline): PlanTimeline => {
+    const next: PlanTimeline = { ...value }
+    if (next.testBetaT3Gamma) {
+      next.testStart = { ...next.testBetaT3Gamma }
+    } else if (next.testStart) {
+      next.testBetaT3Gamma = { ...next.testStart }
+    }
+    return next
   }
 
   useEffect(() => {
@@ -195,12 +215,12 @@ export default function PlanDetailPage() {
         const storedTimeline = localStorage.getItem(`plan_timeline_${foundPlan.id}`)
         const parsedTimeline = parseStored<PlanTimeline>(storedTimeline, {})
         if (storedTimeline) {
-          setTimeline(parsedTimeline)
+          setTimeline(normalizeTimeline(parsedTimeline))
           setTimelineDirty(false)
         } else {
           const sampleTimeline = getSampleTimeline(foundPlan.version)
           if (sampleTimeline) {
-            setTimeline(sampleTimeline)
+            setTimeline(normalizeTimeline(sampleTimeline))
             setTimelineDirty(true)
           } else {
             setTimeline({})
@@ -363,13 +383,17 @@ export default function PlanDetailPage() {
 
   const milestoneRows: Array<{ key: TimelineKey; label: string }> = [
     { key: 'devStart', label: '开发完成' },
-    { key: 'testStart', label: '测试完成' },
+    { key: 'testBetaT1', label: 'Beta_T1完成' },
+    { key: 'testBetaT2', label: 'Beta_T2完成' },
+    { key: 'testBetaT3Gamma', label: 'Beta_T3+Gamma完成' },
     { key: 'package', label: '出包结束' },
   ]
 
   const milestoneLabels: Record<DelayKey, string> = {
     devStart: '开发完成',
-    testStart: '测试完成',
+    testBetaT1: 'Beta_T1完成',
+    testBetaT2: 'Beta_T2完成',
+    testBetaT3Gamma: 'Beta_T3+Gamma完成',
     package: '出包结束',
     upgradeWindow: '升级窗口',
   }
@@ -392,7 +416,11 @@ export default function PlanDetailPage() {
     return date
   }
 
-  const getScheduleStatus = (planned?: string, actual?: string) => {
+  const getScheduleStatus = (planned?: string, actual?: string): {
+    label: string
+    variant: 'secondary' | 'destructive' | 'success' | 'warning' | 'default' | 'outline'
+    isDelayed: boolean
+  } => {
     const plannedDate = parseDate(planned)
     if (!plannedDate) {
       if (actual) {
@@ -432,6 +460,12 @@ export default function PlanDetailPage() {
     const values = [
       timeline.devStart?.planned,
       timeline.devStart?.actual,
+      timeline.testBetaT1?.planned,
+      timeline.testBetaT1?.actual,
+      timeline.testBetaT2?.planned,
+      timeline.testBetaT2?.actual,
+      timeline.testBetaT3Gamma?.planned,
+      timeline.testBetaT3Gamma?.actual,
       timeline.testStart?.planned,
       timeline.testStart?.actual,
       timeline.package?.planned,
@@ -478,10 +512,24 @@ export default function PlanDetailPage() {
     .filter((value): value is Date => Boolean(value))
     .sort((a, b) => a.getTime() - b.getTime())
   const completionTicks = chartRange
-    ? completionDates.map((date) => ({
-      date,
-      percent: getPercent(date),
-    }))
+    ? (() => {
+      if (completionDates.length === 0) return []
+      const minGapPercent = Math.min(10, 100 / Math.max(1, completionDates.length - 1))
+      let lastLabelPercent = -Infinity
+      const ticks = completionDates.map((date) => {
+        const percent = getPercent(date)
+        const labelPercent = Math.max(percent, lastLabelPercent + minGapPercent)
+        lastLabelPercent = labelPercent
+        return { date, percent, labelPercent }
+      })
+      const overflow = ticks[ticks.length - 1].labelPercent - 100
+      if (overflow > 0) {
+        ticks.forEach((tick) => {
+          tick.labelPercent = tick.labelPercent - overflow
+        })
+      }
+      return ticks
+    })()
     : []
 
   const formatTickLabel = (date: Date) => {
@@ -497,13 +545,19 @@ export default function PlanDetailPage() {
   }
 
   const updateTimelineField = (key: TimelineKey, field: 'planned' | 'actual', value: string) => {
-    setTimeline((prev) => ({
-      ...prev,
-      [key]: {
-        ...(prev[key] || {}),
-        [field]: value,
-      },
-    }))
+    setTimeline((prev) => {
+      const next: PlanTimeline = {
+        ...prev,
+        [key]: {
+          ...(prev[key] || {}),
+          [field]: value,
+        },
+      }
+      if (key === 'testBetaT3Gamma') {
+        next.testStart = { ...(next.testBetaT3Gamma || {}) }
+      }
+      return next
+    })
     setTimelineDirty(true)
   }
 
@@ -818,12 +872,20 @@ export default function PlanDetailPage() {
                 <div className="relative h-5">
                   {completionTicks.map((tick) => (
                     <div
-                      key={tick.date.toISOString()}
+                      key={`line-${tick.date.toISOString()}`}
                       className="absolute top-0 -translate-x-1/2"
                       style={{ left: `${tick.percent}%` }}
                     >
                       <div className="h-2 w-px bg-border/70 mx-auto mb-1" />
-                      <span className="whitespace-nowrap">{formatTickLabel(tick.date)}</span>
+                    </div>
+                  ))}
+                  {completionTicks.map((tick) => (
+                    <div
+                      key={`label-${tick.date.toISOString()}`}
+                      className="absolute top-0 -translate-x-1/2"
+                      style={{ left: `${tick.labelPercent}%` }}
+                    >
+                      <span className="block whitespace-nowrap">{formatTickLabel(tick.date)}</span>
                     </div>
                   ))}
                 </div>
@@ -1410,7 +1472,7 @@ export default function PlanDetailPage() {
                 <Label>级别</Label>
                 <Select
                   value={blockerForm.severity}
-                  onValueChange={(value) => setBlockerForm((prev) => ({ ...prev, severity: value }))}
+                  onValueChange={(value) => setBlockerForm((prev) => ({ ...prev, severity: value as 'P0' | 'P1' | 'P2' | 'P3' }))}
                 >
                   <SelectTrigger>
                     <SelectValue />
@@ -1427,7 +1489,7 @@ export default function PlanDetailPage() {
                 <Label>状态</Label>
                 <Select
                   value={blockerForm.status}
-                  onValueChange={(value) => setBlockerForm((prev) => ({ ...prev, status: value }))}
+                  onValueChange={(value) => setBlockerForm((prev) => ({ ...prev, status: value as 'open' | 'in_progress' | 'resolved' }))}
                 >
                   <SelectTrigger>
                     <SelectValue />

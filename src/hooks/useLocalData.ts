@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react'
 import { STORAGE_KEYS, initializeLocalStorage } from '@/lib/mockData'
+import { RINGS, generateInitRegions } from '@/lib/init-data'
 
 export function useLocalData<T>(key: string, initialValue: T) {
   const [data, setData] = useState<T>(initialValue)
@@ -67,90 +68,6 @@ export function usePlans() {
   return { plans, createPlan, updatePlan, deletePlan, loading }
 }
 
-// Ring 分组定义 - 固定不变
-export const RINGS: Record<string, string[]> = {
-  'Ring 0': [
-    '广州友好',
-    '乌兰察布二零一',
-    '乌兰察布二零二',
-  ],
-  'Ring 1': [
-    '深圳',
-    '布宜诺斯艾利斯',
-    '利马一',
-    '利雅得',
-  ],
-  'Ring 2': [
-    '非洲-开罗',
-    '土耳其-伊斯坦布尔',
-    '拉美-墨西哥城一',
-    '亚太-马尼拉',
-    '亚太-雅加达',
-    '华东二',
-    '华北三',
-    '汽车二',
-  ],
-  'Ring 3': [
-    '西南-贵阳一',
-    '华北-乌兰察布-汽车一',
-    '华东-上海二',
-    '非洲-约翰内斯堡',
-    '俄罗斯-莫斯科二',
-    '亚太-曼谷',
-    '中国-香港',
-    '拉美-圣地亚哥',
-    '华北-北京二零一',
-    '华北-乌兰察布二零七',
-    '华东-芜湖二零一',
-  ],
-  'Ring 4': [
-    '亚太-新加坡',
-    '拉美-墨西哥城二',
-    '华南-广州',
-    '华北-北京一',
-    '华北-北京四',
-    '华北-北京二',
-    '华北-乌兰察布一',
-    '华东-上海一',
-    '拉美-圣保罗一',
-    '华南-东莞二零一',
-    '西南-贵阳二零一',
-  ],
-}
-
-// 初始化所有局点数据
-function initializeRegions(): any[] {
-  const allRegionNames = Object.values(RINGS).flat()
-
-  return allRegionNames.map((name) => {
-    // 华北-北京一的后端版本是 25.8.3，其他都是 25.8.2
-    const isBeijing1 = name === '华北-北京一'
-
-    // 根据局点名称推断区域
-    let area = 'domestic'
-    if (name.includes('亚太') || name.includes('曼谷') || name.includes('新加坡') || name.includes('雅加达') || name.includes('马尼拉') || name.includes('中国-香港')) {
-      area = 'apac'
-    } else if (name.includes('非洲') || name.includes('开罗') || name.includes('约翰内斯堡') || name.includes('俄罗斯') || name.includes('莫斯科') || name.includes('土耳其') || name.includes('伊斯坦布尔')) {
-      area = 'africa'
-    } else if (name.includes('拉美') || name.includes('利马') || name.includes('布宜诺斯艾利斯') || name.includes('墨西哥') || name.includes('圣地亚哥') || name.includes('圣保罗')) {
-      area = 'latam'
-    }
-
-    // 只有广州友好和乌兰察布二零一已升级完成
-    const isUpgraded = name === '广州友好' || name === '乌兰察布二零一'
-
-    return {
-      name,
-      area,
-      backendVersion: isBeijing1 ? '25.8.3' : '25.8.2',
-      frontendVersion: '25.8.3.1',
-      targetVersion: '25.10.0',
-      backendReady: isUpgraded,
-      frontendReady: isUpgraded,
-    }
-  })
-}
-
 // Regions API mock
 export function useRegions() {
   const [initialized, setInitialized] = useState(false)
@@ -178,7 +95,7 @@ export function useRegions() {
       }
 
       if (shouldInitialize) {
-        const initialRegions = initializeRegions()
+        const initialRegions = generateInitRegions()
         setRegions(initialRegions)
         localStorage.setItem('settings_regions', JSON.stringify(initialRegions))
         console.log('重新初始化局点数据', initialRegions.length, '个局点')

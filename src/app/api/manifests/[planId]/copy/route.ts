@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/db'
+import { query, queryOne, insert } from '@/lib/db'
 
 // POST /api/manifests/[planId]/copy - Copy manifest to create a new plan
 export async function POST(
@@ -12,13 +12,12 @@ export async function POST(
     const { newVersion, newType, newSummary } = body
 
     // Get source manifest
-    const sourceManifest = await prisma.manifest.findUnique({
-      where: { planId },
-      include: {
-        plan: true,
-        components: true,
-      },
-    })
+    const sourceManifest = await queryOne<any>(
+      `SELECT m.*, p.* FROM manifests m
+       JOIN plans p ON m.plan_id = p.id
+       WHERE m.plan_id = ?`,
+      [planId]
+    )
 
     if (!sourceManifest) {
       return NextResponse.json(
@@ -27,10 +26,17 @@ export async function POST(
       )
     }
 
+    // Get source components
+    const sourceComponents = await query<any>(
+      `SELECT * FROM manifest_components WHERE manifest_id = ?`,
+      [planId]
+    )
+
     // Check if new version already exists
-    const existingPlan = await prisma.plan.findUnique({
-      where: { version: newVersion },
-    })
+    const existingPlan = await queryOne<any>(
+      'SELECT * FROM plans WHERE version = ?',
+      [newVersion]
+    )
 
     if (existingPlan) {
       return NextResponse.json(
@@ -44,60 +50,50 @@ export async function POST(
     const versionLine = `${versionParts[0]}.${versionParts[1]}`
 
     // Create new plan
-    const newPlan = await prisma.plan.create({
-      data: {
-        version: newVersion,
+    const newPlanId = await insert(
+      `INSERT INTO plans (id, version, version_line, type, status, summary, related_requirements, related_bugs)
+       VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)`,
+      [
+        Date.now().toString(),
+        newVersion,
         versionLine,
-        type: newType,
-        status: 'draft',
-        summary: newSummary || `从 ${sourceManifest.plan.version} 复制`,
-        relatedRequirements: '[]',
-        relatedBugs: '[]',
-      },
-    })
+        newType,
+        newSummary || `从 ${sourceManifest.version} 复制`,
+        '[]',
+        '[]',
+      ]
+    )
 
-    // Create new manifest with copied components
-    const newManifest = await prisma.manifest.create({
-      data: {
-        planId: newPlan.id,
-        frontendVersion: sourceManifest.frontendVersion,
-        frontendChangeType: 'unchanged',
-        frontendChangeReason: '',
-        feBeCheckStatus: 'ok',
-        feBeCheckMessage: '',
-        dependencyCheckStatus: 'ok',
-        dependencyCheckMessage: '',
-        components: {
-          create: sourceManifest.components.map(c => ({
-            componentName: c.componentName,
-            targetVersion: c.targetVersion,
-            changeType: 'unchanged',
-            changeReason: '',
-          })),
-        },
-      },
-      include: {
-        plan: true,
-        components: true,
-      },
-    })
+    // Create new manifest
+    await insert(
+      `INSERT INTO manifests (plan_id, frontend_version, frontend_change_type, frontend_change_reason,
+         fe_be_check_status, fe_be_check_message, dependency_check_status, dependency_check_message)
+       VALUES (?, ?, '', '', 'ok', '', 'ok', '')`,
+      [newPlanId, sourceManifest.frontendVersion]
+    )
 
-    // Create audit logs
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'plan',
-        entityId: newPlan.id,
-        action: 'create',
-        newValue: JSON.stringify({ copiedFrom: planId }),
-        operator: 'system',
-      },
-    })
+    // Copy components
+    for (const comp of sourceComponents) {
+      await insert(
+        `INSERT INTO manifest_components (manifest_id, component_name, target_version, change_type, change_reason)
+         VALUES (?, ?, ?, 'unchanged', '')`,
+        [newPlanId, comp.component_name, comp.target_version]
+      )
+    }
+
+    // Get the complete new manifest
+    const newManifest = await queryOne<any>(
+      `SELECT m.*, p.* FROM manifests m
+       JOIN plans p ON m.plan_id = p.id
+       WHERE m.plan_id = ?`,
+      [newPlanId]
+    )
 
     return NextResponse.json({ success: true, data: newManifest })
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error copying manifest:', error)
     return NextResponse.json(
-      { success: false, error: 'Failed to copy manifest' },
+      { success: false, error: error.message || 'Failed to copy manifest' },
       { status: 500 }
     )
   }

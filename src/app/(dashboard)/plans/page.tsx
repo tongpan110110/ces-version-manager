@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState, useMemo } from 'react'
+import { useEffect, useState, useMemo, Suspense } from 'react'
 import Link from 'next/link'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -25,7 +25,7 @@ import {
 import { Plus, Search, ChevronRight, Trash2 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
 import { useRouter, useSearchParams } from 'next/navigation'
-import { usePlans } from '@/hooks/useLocalData'
+import { usePlans, useVersionLines } from '@/hooks/useAPI'
 
 interface Plan {
   id: string
@@ -40,8 +40,9 @@ interface Plan {
   updatedAt: string
 }
 
-export default function PlansPage() {
+function PlansPageContent() {
   const { plans, createPlan, deletePlan, loading } = usePlans()
+  const { versionLines } = useVersionLines()
   const router = useRouter()
   const searchParams = useSearchParams()
   const { toast } = useToast()
@@ -64,19 +65,6 @@ export default function PlansPage() {
   // 删除确认弹窗
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [planToDelete, setPlanToDelete] = useState<Plan | null>(null)
-
-  // 版本线选项（从 localStorage 读取）
-  const [versionLines, setVersionLines] = useState<string[]>([])
-
-  useEffect(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('settings_versionLines')
-      if (saved) {
-        const vls = JSON.parse(saved)
-        setVersionLines(vls.map((vl: any) => vl.versionLine))
-      }
-    }
-  }, [])
 
   // 更新 URL 参数
   const updateURL = (params: Record<string, string>) => {
@@ -147,7 +135,7 @@ export default function PlansPage() {
       const versionParts = newVersion.split('.')
       const versionLine = `${versionParts[0]}.${versionParts[1]}`
 
-      const newPlan = createPlan({
+      const newPlan = await createPlan({
         version: newVersion,
         versionLine,
         type: newType,
@@ -338,8 +326,8 @@ export default function PlansPage() {
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="all">全部版本线</SelectItem>
-                {versionLines.map(vl => (
-                  <SelectItem key={vl} value={vl}>{vl}.x</SelectItem>
+                {versionLines.map((vl: any) => (
+                  <SelectItem key={vl.versionLine} value={vl.versionLine}>{vl.versionLine}.x</SelectItem>
                 ))}
               </SelectContent>
             </Select>
@@ -472,5 +460,13 @@ export default function PlansPage() {
         </DialogContent>
       </Dialog>
     </div>
+  )
+}
+
+export default function PlansPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full">加载中...</div>}>
+      <PlansPageContent />
+    </Suspense>
   )
 }

@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/db'
+import { query, queryOne, insert, update, remove } from '@/lib/db'
 
 // GET /api/manifests/[planId] - Get manifest for a plan
 export async function GET(
@@ -9,15 +9,10 @@ export async function GET(
   try {
     const { planId } = params
 
-    const manifest = await prisma.manifest.findUnique({
-      where: { planId },
-      include: {
-        plan: true,
-        components: {
-          orderBy: { componentName: 'asc' },
-        },
-      },
-    })
+    const manifest = await queryOne<any>(
+      `SELECT * FROM manifests WHERE plan_id = ?`,
+      [planId]
+    )
 
     if (!manifest) {
       return NextResponse.json(
@@ -26,7 +21,26 @@ export async function GET(
       )
     }
 
-    return NextResponse.json({ success: true, data: manifest })
+    // Get plan data
+    const plan = await queryOne<any>(
+      `SELECT * FROM plans WHERE id = ?`,
+      [manifest.plan_id]
+    )
+
+    // Get components ordered by name
+    const components = await query<any>(
+      `SELECT * FROM manifest_components WHERE manifest_id = ? ORDER BY component_name ASC`,
+      [manifest.id]
+    )
+
+    // Build response with relations
+    const manifestWithRelations = {
+      ...manifest,
+      plan,
+      components,
+    }
+
+    return NextResponse.json({ success: true, data: manifestWithRelations })
   } catch (error) {
     console.error('Error fetching manifest:', error)
     return NextResponse.json(
@@ -52,9 +66,10 @@ export async function POST(
     } = body
 
     // Check if plan exists
-    const plan = await prisma.plan.findUnique({
-      where: { id: planId },
-    })
+    const plan = await queryOne<any>(
+      `SELECT * FROM plans WHERE id = ?`,
+      [planId]
+    )
 
     if (!plan) {
       return NextResponse.json(
@@ -64,9 +79,10 @@ export async function POST(
     }
 
     // Check if manifest already exists
-    const existing = await prisma.manifest.findUnique({
-      where: { planId },
-    })
+    const existing = await queryOne<any>(
+      `SELECT * FROM manifests WHERE plan_id = ?`,
+      [planId]
+    )
 
     if (existing) {
       return NextResponse.json(
@@ -75,38 +91,77 @@ export async function POST(
       )
     }
 
-    const manifest = await prisma.manifest.create({
-      data: {
+    // Create manifest
+    const manifestId = await insert(
+      `INSERT INTO manifests (
+        id, plan_id, frontend_version, frontend_change_type, frontend_change_reason,
+        fe_be_check_status, fe_be_check_message,
+        dependency_check_status, dependency_check_message,
+        created_at, updated_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [
+        generateId(),
         planId,
         frontendVersion,
-        frontendChangeType: frontendChangeType || 'unchanged',
-        frontendChangeReason: frontendChangeReason || '',
-        components: {
-          create: components.map((c: any) => ({
-            componentName: c.componentName,
-            targetVersion: c.targetVersion,
-            changeType: c.changeType || 'unchanged',
-            changeReason: c.changeReason || '',
-          })),
-        },
-      },
-      include: {
-        components: true,
-      },
-    })
+        frontendChangeType || 'unchanged',
+        frontendChangeReason || '',
+        'ok',
+        '',
+        'ok',
+        '',
+      ]
+    )
+
+    // Create components
+    for (const c of components) {
+      await insert(
+        `INSERT INTO manifest_components (
+          id, manifest_id, component_name, target_version, change_type, change_reason,
+          created_at, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+        [
+          generateId(),
+          manifestId,
+          c.componentName,
+          c.targetVersion,
+          c.changeType || 'unchanged',
+          c.changeReason || '',
+        ]
+      )
+    }
+
+    // Get created manifest with components
+    const createdManifest = await queryOne<any>(
+      `SELECT * FROM manifests WHERE id = ?`,
+      [manifestId]
+    )
+
+    const createdComponents = await query<any>(
+      `SELECT * FROM manifest_components WHERE manifest_id = ? ORDER BY component_name ASC`,
+      [manifestId]
+    )
+
+    const manifestWithComponents = {
+      ...createdManifest,
+      components: createdComponents,
+    }
 
     // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'manifest',
-        entityId: manifest.id,
-        action: 'create',
-        newValue: JSON.stringify({ planId, frontendVersion }),
-        operator: 'system',
-      },
-    })
+    await insert(
+      `INSERT INTO audit_logs (
+        id, entity_type, entity_id, action, new_value, operator, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        generateId(),
+        'manifest',
+        manifestId,
+        'create',
+        JSON.stringify({ planId, frontendVersion }),
+        'system',
+      ]
+    )
 
-    return NextResponse.json({ success: true, data: manifest })
+    return NextResponse.json({ success: true, data: manifestWithComponents })
   } catch (error) {
     console.error('Error creating manifest:', error)
     return NextResponse.json(
@@ -135,10 +190,11 @@ export async function PUT(
       components,
     } = body
 
-    const existing = await prisma.manifest.findUnique({
-      where: { planId },
-      include: { components: true },
-    })
+    // Get existing manifest
+    const existing = await queryOne<any>(
+      `SELECT * FROM manifests WHERE plan_id = ?`,
+      [planId]
+    )
 
     if (!existing) {
       return NextResponse.json(
@@ -147,10 +203,30 @@ export async function PUT(
       )
     }
 
+    // Get existing components for audit log
+    const existingComponents = await query<any>(
+      `SELECT * FROM manifest_components WHERE manifest_id = ? ORDER BY component_name ASC`,
+      [existing.id]
+    )
+
+    const existingForAudit = {
+      ...existing,
+      components: existingComponents,
+    }
+
     // Update manifest
-    const manifest = await prisma.manifest.update({
-      where: { planId },
-      data: {
+    await update(
+      `UPDATE manifests SET
+        frontend_version = ?,
+        frontend_change_type = ?,
+        frontend_change_reason = ?,
+        fe_be_check_status = ?,
+        fe_be_check_message = ?,
+        dependency_check_status = ?,
+        dependency_check_message = ?,
+        updated_at = NOW()
+      WHERE plan_id = ?`,
+      [
         frontendVersion,
         frontendChangeType,
         frontendChangeReason,
@@ -158,51 +234,70 @@ export async function PUT(
         feBeCheckMessage,
         dependencyCheckStatus,
         dependencyCheckMessage,
-      },
-    })
+        planId,
+      ]
+    )
 
     // Update components if provided
     if (components && Array.isArray(components)) {
       // Delete existing components
-      await prisma.manifestComponent.deleteMany({
-        where: { manifestId: existing.id },
-      })
+      await remove(
+        `DELETE FROM manifest_components WHERE manifest_id = ?`,
+        [existing.id]
+      )
 
       // Create new components
-      await prisma.manifestComponent.createMany({
-        data: components.map((c: any) => ({
-          manifestId: existing.id,
-          componentName: c.componentName,
-          targetVersion: c.targetVersion,
-          changeType: c.changeType || 'unchanged',
-          changeReason: c.changeReason || '',
-        })),
-      })
+      for (const c of components) {
+        await insert(
+          `INSERT INTO manifest_components (
+            id, manifest_id, component_name, target_version, change_type, change_reason,
+            created_at, updated_at
+          ) VALUES (?, ?, ?, ?, ?, ?, NOW(), NOW())`,
+          [
+            generateId(),
+            existing.id,
+            c.componentName,
+            c.targetVersion,
+            c.changeType || 'unchanged',
+            c.changeReason || '',
+          ]
+        )
+      }
     }
 
     // Get updated manifest with components
-    const updatedManifest = await prisma.manifest.findUnique({
-      where: { planId },
-      include: {
-        components: {
-          orderBy: { componentName: 'asc' },
-        },
-      },
-    })
+    const updatedManifest = await queryOne<any>(
+      `SELECT * FROM manifests WHERE plan_id = ?`,
+      [planId]
+    )
+
+    const updatedComponents = await query<any>(
+      `SELECT * FROM manifest_components WHERE manifest_id = ? ORDER BY component_name ASC`,
+      [updatedManifest.id]
+    )
+
+    const updatedWithComponents = {
+      ...updatedManifest,
+      components: updatedComponents,
+    }
 
     // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'manifest',
-        entityId: manifest.id,
-        action: 'update',
-        oldValue: JSON.stringify(existing),
-        newValue: JSON.stringify(updatedManifest),
-        operator: 'system',
-      },
-    })
+    await insert(
+      `INSERT INTO audit_logs (
+        id, entity_type, entity_id, action, old_value, new_value, operator, created_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        generateId(),
+        'manifest',
+        existing.id,
+        'update',
+        JSON.stringify(existingForAudit),
+        JSON.stringify(updatedWithComponents),
+        'system',
+      ]
+    )
 
-    return NextResponse.json({ success: true, data: updatedManifest })
+    return NextResponse.json({ success: true, data: updatedWithComponents })
   } catch (error) {
     console.error('Error updating manifest:', error)
     return NextResponse.json(
@@ -210,4 +305,11 @@ export async function PUT(
       { status: 500 }
     )
   }
+}
+
+// Helper function to generate CUID-like IDs
+function generateId(): string {
+  const timestamp = Date.now().toString(36)
+  const random = Math.random().toString(36).substring(2, 9)
+  return `${timestamp}${random}`
 }

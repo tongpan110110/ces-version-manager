@@ -1,5 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server'
-import prisma from '@/lib/db'
+import { queryOne, insert, update } from '@/lib/db'
+
+// Helper function to convert snake_case to camelCase
+function toCamelCase(obj: any): any {
+  if (obj === null || obj === undefined) return obj
+  if (Array.isArray(obj)) return obj.map(toCamelCase)
+  if (typeof obj !== 'object') return obj
+
+  const result: any = {}
+  for (const key in obj) {
+    if (obj.hasOwnProperty(key)) {
+      const camelKey = key.replace(/_([a-z])/g, (_, letter) => letter.toUpperCase())
+      result[camelKey] = toCamelCase(obj[key])
+    }
+  }
+  return result
+}
 
 // PATCH /api/regions/[regionId]/version - Update region's current version
 export async function PATCH(
@@ -11,11 +27,26 @@ export async function PATCH(
     const body = await request.json()
     const { planId, backendReady, frontendReady } = body
 
-    // Check if region exists
-    const region = await prisma.region.findUnique({
-      where: { id: regionId },
-      include: { currentVersion: true },
-    })
+    // Check if region exists and get current version
+    const region = await queryOne(
+      `SELECT r.*,
+              rv.id as current_version_id,
+              rv.plan_id as current_plan_id,
+              rv.backend_ready as current_backend_ready,
+              rv.frontend_ready as current_frontend_ready,
+              rv.updated_at as current_updated_at,
+              p.id as plan_id,
+              p.version as plan_version,
+              p.version_line as plan_version_line,
+              p.type as plan_type,
+              p.status as plan_status,
+              p.summary as plan_summary
+       FROM regions r
+       LEFT JOIN region_versions rv ON r.id = rv.region_id
+       LEFT JOIN plans p ON rv.plan_id = p.id
+       WHERE r.id = ?`,
+      [regionId]
+    )
 
     if (!region) {
       return NextResponse.json(
@@ -24,11 +55,12 @@ export async function PATCH(
       )
     }
 
-    // Check if plan exists
+    // Check if plan exists if provided
     if (planId) {
-      const plan = await prisma.plan.findUnique({
-        where: { id: planId },
-      })
+      const plan = await queryOne(
+        'SELECT * FROM plans WHERE id = ?',
+        [planId]
+      )
 
       if (!plan) {
         return NextResponse.json(
@@ -38,51 +70,94 @@ export async function PATCH(
       }
     }
 
-    // Update or create region version
-    let regionVersion
-    const oldVersion = region.currentVersion
+    // Get old version info for audit log
+    const oldPlanId = region.currentPlanId || null
 
-    if (region.currentVersion) {
-      regionVersion = await prisma.regionVersion.update({
-        where: { regionId },
-        data: {
-          ...(planId && { planId }),
-          ...(typeof backendReady === 'boolean' && { backendReady }),
-          ...(typeof frontendReady === 'boolean' && { frontendReady }),
-          lastUpdatedAt: new Date(),
-        },
-        include: {
-          plan: true,
-        },
-      })
+    // Update or create region version
+    let regionVersion: any = null
+
+    if (region.currentVersionId) {
+      // Update existing region version
+      const updateFields: string[] = []
+      const updateValues: any[] = []
+
+      if (planId !== undefined) {
+        updateFields.push('plan_id = ?')
+        updateValues.push(planId)
+      }
+      if (typeof backendReady === 'boolean') {
+        updateFields.push('backend_ready = ?')
+        updateValues.push(backendReady)
+      }
+      if (typeof frontendReady === 'boolean') {
+        updateFields.push('frontend_ready = ?')
+        updateValues.push(frontendReady)
+      }
+
+      if (updateFields.length > 0) {
+        updateFields.push('updated_at = NOW()')
+        updateValues.push(regionId)
+
+        await update(
+          `UPDATE region_versions SET ${updateFields.join(', ')} WHERE region_id = ?`,
+          updateValues
+        )
+      }
+
+      // Fetch updated region version with plan
+      regionVersion = await queryOne(
+        `SELECT rv.*,
+                p.id as plan_id,
+                p.version as plan_version,
+                p.version_line as plan_version_line,
+                p.type as plan_type,
+                p.status as plan_status,
+                p.summary as plan_summary
+         FROM region_versions rv
+         LEFT JOIN plans p ON rv.plan_id = p.id
+         WHERE rv.region_id = ?`,
+        [regionId]
+      )
     } else if (planId) {
-      regionVersion = await prisma.regionVersion.create({
-        data: {
-          regionId,
-          planId,
-          backendReady: backendReady ?? false,
-          frontendReady: frontendReady ?? false,
-        },
-        include: {
-          plan: true,
-        },
-      })
+      // Create new region version
+      const newId = await insert(
+        `INSERT INTO region_versions (region_id, plan_id, backend_ready, frontend_ready, updated_at)
+         VALUES (?, ?, ?, ?, NOW())`,
+        [regionId, planId, backendReady ?? false, frontendReady ?? false]
+      )
+
+      // Fetch created region version with plan
+      regionVersion = await queryOne(
+        `SELECT rv.*,
+                p.id as plan_id,
+                p.version as plan_version,
+                p.version_line as plan_version_line,
+                p.type as plan_type,
+                p.status as plan_status,
+                p.summary as plan_summary
+         FROM region_versions rv
+         LEFT JOIN plans p ON rv.plan_id = p.id
+         WHERE rv.id = ?`,
+        [newId]
+      )
     }
 
     // Create audit log
-    await prisma.auditLog.create({
-      data: {
-        entityType: 'region',
-        entityId: regionId,
-        action: 'update',
-        field: 'version',
-        oldValue: oldVersion?.planId || null,
-        newValue: regionVersion?.planId || null,
-        operator: 'system',
-      },
-    })
+    await insert(
+      `INSERT INTO audit_logs (entity_type, entity_id, action, field, old_value, new_value, operator, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        'region',
+        regionId,
+        'update',
+        'version',
+        oldPlanId,
+        regionVersion?.planId || null,
+        'system'
+      ]
+    )
 
-    return NextResponse.json({ success: true, data: regionVersion })
+    return NextResponse.json({ success: true, data: toCamelCase(regionVersion) })
   } catch (error) {
     console.error('Error updating region version:', error)
     return NextResponse.json(

@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, Suspense } from 'react'
 import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import {
@@ -14,7 +14,8 @@ import { Badge } from '@/components/ui/badge'
 import { Input } from '@/components/ui/input'
 import { Map, Filter, Search } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { useRegions, RINGS } from '@/hooks/useLocalData'
+import { useRegions } from '@/hooks/useAPI'
+import { RINGS } from '@/lib/init-data'
 import { useRouter, useSearchParams } from 'next/navigation'
 
 interface Region {
@@ -27,8 +28,8 @@ interface Region {
   frontendReady: boolean
 }
 
-export default function RegionsPage() {
-  const { regions, baselines, versionLines, loading } = useRegions()
+function RegionsPageContent() {
+  const { regions, loading } = useRegions()
   const router = useRouter()
   const searchParams = useSearchParams()
 
@@ -362,5 +363,13 @@ export default function RegionsPage() {
         </>
       )}
     </div>
+  )
+}
+
+export default function RegionsPage() {
+  return (
+    <Suspense fallback={<div className="flex items-center justify-center h-full">加载中...</div>}>
+      <RegionsPageContent />
+    </Suspense>
   )
 }
