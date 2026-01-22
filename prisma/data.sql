@@ -1,5 +1,5 @@
 -- CES 版本管理系统 - 完整数据导入 SQL
--- 包含所有计划、局点、组件、里程碑等数据
+-- MySQL 8.0 兼容版本
 
 USE ces_version;
 
@@ -41,7 +41,7 @@ INSERT INTO plans (id, version, version_line, type, status, summary, related_req
 ('4', '25.10.0', '25.10', 'Feature Release', 'upgrading', '25.10.0的基线版本', '["REQ-101","REQ-102"]', '[]', '2024-04-01 00:00:00', '2026-01-15 03:03:18'),
 ('1768445696762', '26.1.0', '26.1', 'Feature Release', 'testing', '当前Beta_T1测试阶段', '[]', '[]', '2026-01-15 02:54:56', '2026-01-15 08:41:52');
 
--- 5. 37个局点数据
+-- 5. 37个局点数据（使用 0/1 代替 true/false）
 INSERT INTO regions (name, area, backend_version, frontend_version, target_version, backend_ready, frontend_ready) VALUES
 ('广州友好', 'domestic', '25.8.2', '25.8.3.1', '25.10.0', 1, 1),
 ('乌兰察布二零一', 'domestic', '25.8.2', '25.8.3.1', '25.10.0', 1, 1),
@@ -91,7 +91,7 @@ INSERT INTO plan_timelines (plan_id, timeline_key, planned_date, actual_date) VA
 INSERT INTO upgrade_windows (plan_id, planned_start_date, planned_end_date) VALUES
 ('1768445696762', '2026-02-27', '2026-04-30');
 
--- 8. 计划组件（25.10.0 的18个组件）
+-- 8. 计划组件（25.10.0 的18个组件，使用 0/1 代替 true/false）
 INSERT INTO plan_components (plan_id, component_name, component_type, current_version, target_version, enabled) VALUES
 ('4', 'CES-Portal', 'frontend', '25.8.3.1', '25.10.0', 1),
 ('4', 'CES-GO-API', 'backend', '25.8.2', '25.10.0', 1),
