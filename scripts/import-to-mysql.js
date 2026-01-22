@@ -40,7 +40,7 @@ async function importData() {
     console.log('导入局点...')
     for (const region of data.regions) {
       await connection.execute(
-        'INSERT INTO regions (name, area, backend_version, frontend_version, target_version, backend_ready, frontend_ready) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        'INSERT IGNORE INTO regions (name, area, backend_version, frontend_version, target_version, backend_ready, frontend_ready) VALUES (?, ?, ?, ?, ?, ?, ?)',
         [region.name, region.area, region.backendVersion, region.frontendVersion, region.targetVersion, region.backendReady, region.frontendReady]
       )
     }
@@ -71,7 +71,7 @@ async function importData() {
     console.log('导入计划...')
     for (const plan of data.plans) {
       await connection.execute(
-        'INSERT INTO plans (id, version, version_line, type, status, summary, related_requirements, related_bugs) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+        'INSERT IGNORE INTO plans (id, version, version_line, type, status, summary, related_requirements, related_bugs) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
         [plan.id, plan.version, plan.versionLine, plan.type, plan.status, plan.summary, plan.relatedRequirements, plan.relatedBugs]
       )
     }
@@ -86,12 +86,12 @@ async function importData() {
           const value = timeline[key]
           if (key === 'upgradeWindow') {
             await connection.execute(
-              'INSERT INTO upgrade_windows (plan_id, planned_start_date, planned_end_date) VALUES (?, ?, ?)',
+              'INSERT IGNORE INTO upgrade_windows (plan_id, planned_start_date, planned_end_date) VALUES (?, ?, ?)',
               [planId, value.plannedStart, value.plannedEnd]
             )
           } else {
             await connection.execute(
-              'INSERT INTO plan_timelines (plan_id, timeline_key, planned_date, actual_date) VALUES (?, ?, ?, ?)',
+              'INSERT IGNORE INTO plan_timelines (plan_id, timeline_key, planned_date, actual_date) VALUES (?, ?, ?, ?)',
               [planId, key, value.planned, value.actual]
             )
           }
@@ -107,7 +107,7 @@ async function importData() {
         const components = data.planComponents[planId]
         for (const comp of components) {
           await connection.execute(
-            'INSERT INTO plan_components (plan_id, component_name, component_type, current_version, target_version, enabled) VALUES (?, ?, ?, ?, ?, ?)',
+            'INSERT IGNORE INTO plan_components (plan_id, component_name, component_type, current_version, target_version, enabled) VALUES (?, ?, ?, ?, ?, ?)',
             [planId, comp.name, comp.type, comp.currentVersion, comp.targetVersion, comp.enabled]
           )
         }
@@ -123,7 +123,7 @@ async function importData() {
         for (const key of Object.keys(delays)) {
           const delay = delays[key]
           await connection.execute(
-            'INSERT INTO plan_delays (plan_id, delay_key, delay_type, delay_reason, owner, recorded_at) VALUES (?, ?, ?, ?, ?, ?)',
+            'INSERT IGNORE INTO plan_delays (plan_id, delay_key, delay_type, delay_reason, owner, recorded_at) VALUES (?, ?, ?, ?, ?, ?)',
             [planId, key, delay.type, delay.reason, delay.owner, delay.recordedAt]
           )
         }
