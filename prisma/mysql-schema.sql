@@ -1,5 +1,9 @@
 -- CES 版本管理系统 - MySQL 数据库表结构
--- 不使用 Prisma，使用纯 MySQL
+-- MySQL 8.0 兼容版本
+
+-- 设置字符集
+SET NAMES utf8mb4;
+SET FOREIGN_KEY_CHECKS = 0;
 
 -- 创建数据库
 CREATE DATABASE IF NOT EXISTS ces_version CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
@@ -13,8 +17,8 @@ CREATE TABLE IF NOT EXISTS regions (
   backend_version VARCHAR(50) DEFAULT '',
   frontend_version VARCHAR(50) DEFAULT '',
   target_version VARCHAR(50) DEFAULT '',
-  backend_ready BOOLEAN DEFAULT FALSE,
-  frontend_ready BOOLEAN DEFAULT FALSE,
+  backend_ready TINYINT(1) DEFAULT 0,
+  frontend_ready TINYINT(1) DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_area (area)
@@ -73,7 +77,7 @@ CREATE TABLE IF NOT EXISTS plan_components (
   component_type VARCHAR(50) NOT NULL COMMENT 'frontend, backend',
   current_version VARCHAR(50) NOT NULL,
   target_version VARCHAR(50) NOT NULL,
-  enabled BOOLEAN DEFAULT TRUE,
+  enabled TINYINT(1) DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   UNIQUE KEY unique_plan_component (plan_id, component_name),
@@ -99,7 +103,7 @@ CREATE TABLE IF NOT EXISTS version_lines (
   id INT AUTO_INCREMENT PRIMARY KEY,
   version_line VARCHAR(50) NOT NULL UNIQUE COMMENT '25.8, 25.10',
   baseline VARCHAR(50) NOT NULL,
-  is_active BOOLEAN DEFAULT TRUE,
+  is_active TINYINT(1) DEFAULT 1,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
@@ -121,3 +125,6 @@ CREATE TABLE IF NOT EXISTS system_configs (
   config_value TEXT NOT NULL COMMENT '可以是字符串、JSON等',
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+-- 恢复外键检查
+SET FOREIGN_KEY_CHECKS = 1;
