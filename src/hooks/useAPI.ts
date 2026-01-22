@@ -207,3 +207,56 @@ export function useComponents() {
 
   return { components, loading, createComponent, deleteComponent }
 }
+
+// 仪表盘数据 Hook
+export function useDashboard() {
+  const [data, setData] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+
+  useEffect(() => {
+    fetchDashboard()
+  }, [])
+
+  const fetchDashboard = async () => {
+    try {
+      const result = await apiRequest('/api/dashboard')
+      setData(result.data)
+    } catch (error: any) {
+      console.error('获取仪表盘数据失败:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return { data, loading, fetchDashboard }
+}
+
+// 获取单个计划详情 Hook
+export function usePlan(planId: string) {
+  const [plan, setPlan] = useState<any>(null)
+  const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (planId) {
+      fetchPlan()
+    }
+  }, [planId])
+
+  const fetchPlan = async () => {
+    if (!planId) return
+    setLoading(true)
+    try {
+      const result = await apiRequest(`/api/plans/${planId}`)
+      setPlan(result.data)
+      setError(null)
+    } catch (error: any) {
+      console.error('获取计划详情失败:', error)
+      setError(error.message || '获取失败')
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  return { plan, loading, error, fetchPlan }
+}

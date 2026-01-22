@@ -44,8 +44,8 @@ import {
   ChevronDown,
 } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
-import { usePlans } from '@/hooks/useLocalData'
-import { useRegions } from '@/hooks/useLocalData'
+import { usePlan } from '@/hooks/useAPI'
+import { useRegions } from '@/hooks/useAPI'
 
 interface PlanDetail {
   id: string
@@ -108,10 +108,10 @@ export default function PlanDetailPage() {
   const params = useParams()
   const router = useRouter()
   const { toast } = useToast()
-  const { plans, updatePlan, loading: plansLoading } = usePlans()
+  const planId = typeof params.planId === 'string' ? params.planId : Array.isArray(params.planId) ? params.planId[0] : ''
+  const { plan, loading: planLoading, error: planError, fetchPlan } = usePlan(planId)
   const { regions } = useRegions()
 
-  const [plan, setPlan] = useState<PlanDetail | null>(null)
   const [editDialogOpen, setEditDialogOpen] = useState(false)
   const [componentDialogOpen, setComponentDialogOpen] = useState(false)
 
@@ -190,60 +190,48 @@ export default function PlanDetailPage() {
   }
 
   useEffect(() => {
-    if (!plansLoading && params.planId) {
-      const foundPlan = plans.find(p => p.id === params.planId)
-      if (foundPlan) {
-        setPlan(foundPlan)
-        setEditSummary(foundPlan.summary)
-        setEditStatus(foundPlan.status)
-        setEditType(foundPlan.type)
-        setTimelineExpanded(false)
-        const reqs = JSON.parse(foundPlan.relatedRequirements || '[]')
-        const bugs = JSON.parse(foundPlan.relatedBugs || '[]')
-        setEditRequirements(Array.isArray(reqs) ? reqs.join(', ') : '')
-        setEditBugs(Array.isArray(bugs) ? bugs.join(', ') : '')
+    if (plan) {
+      setEditSummary(plan.summary || '')
+      setEditStatus(plan.status || '')
+      setEditType(plan.type || '')
+      setTimelineExpanded(false)
+      const reqs = Array.isArray(plan.relatedRequirements) ? plan.relatedRequirements : []
+      const bugs = Array.isArray(plan.relatedBugs) ? plan.relatedBugs : []
+      setEditRequirements(reqs.join(', '))
+      setEditBugs(bugs.join(', '))
 
-        // 加载该计划的组件配置
-        const storedComponents = localStorage.getItem(`plan_components_${foundPlan.id}`)
-        if (storedComponents) {
-          setPlanComponents(JSON.parse(storedComponents))
-        } else {
-          // 如果没有配置过，初始化为空
-          setPlanComponents([])
-        }
-
-        const storedTimeline = localStorage.getItem(`plan_timeline_${foundPlan.id}`)
-        const parsedTimeline = parseStored<PlanTimeline>(storedTimeline, {})
-        if (storedTimeline) {
-          setTimeline(normalizeTimeline(parsedTimeline))
-          setTimelineDirty(false)
-        } else {
-          const sampleTimeline = getSampleTimeline(foundPlan.version)
-          if (sampleTimeline) {
-            setTimeline(normalizeTimeline(sampleTimeline))
-            setTimelineDirty(true)
-          } else {
-            setTimeline({})
-            setTimelineDirty(false)
-          }
-        }
-        setTimelineSavedAt(null)
-
-        const storedDelayReasons = localStorage.getItem(`plan_delay_reasons_${foundPlan.id}`)
-        setDelayReasons(parseStored<Partial<Record<DelayKey, DelayReason>>>(storedDelayReasons, {}))
-
-        const storedBlockers = localStorage.getItem(`plan_blockers_${foundPlan.id}`)
-        setBlockers(parseStored<BlockerItem[]>(storedBlockers, []))
+      // 加载该计划的组件配置 - 暂时从 localStorage 读取
+      const storedComponents = localStorage.getItem(`plan_components_${plan.id}`)
+      if (storedComponents) {
+        setPlanComponents(JSON.parse(storedComponents))
       } else {
-        setPlan(null)
-        setTimeline({})
-        setTimelineDirty(false)
-        setTimelineSavedAt(null)
-        setDelayReasons({})
-        setBlockers([])
+        setPlanComponents([])
       }
+
+      const storedTimeline = localStorage.getItem(`plan_timeline_${plan.id}`)
+      const parsedTimeline = parseStored<PlanTimeline>(storedTimeline, {})
+      if (storedTimeline) {
+        setTimeline(normalizeTimeline(parsedTimeline))
+        setTimelineDirty(false)
+      } else {
+        const sampleTimeline = getSampleTimeline(plan.version)
+        if (sampleTimeline) {
+          setTimeline(normalizeTimeline(sampleTimeline))
+          setTimelineDirty(true)
+        } else {
+          setTimeline({})
+          setTimelineDirty(false)
+        }
+      }
+      setTimelineSavedAt(null)
+
+      const storedDelayReasons = localStorage.getItem(`plan_delay_reasons_${plan.id}`)
+      setDelayReasons(parseStored<Partial<Record<DelayKey, DelayReason>>>(storedDelayReasons, {}))
+
+      const storedBlockers = localStorage.getItem(`plan_blockers_${plan.id}`)
+      setBlockers(parseStored<BlockerItem[]>(storedBlockers, []))
     }
-  }, [params.planId, plans, plansLoading])
+  }, [plan])
 
   // 加载系统组件库
   useEffect(() => {
@@ -269,30 +257,40 @@ export default function PlanDetailPage() {
     completed: { label: '已完成', variant: 'completed' },
   }
 
-  const handleSavePlan = () => {
+  const handleSavePlan = async () => {
     const reqArray = editRequirements.split(',').map(s => s.trim()).filter(Boolean)
     const bugArray = editBugs.split(',').map(s => s.trim()).filter(Boolean)
 
-    updatePlan(plan!.id, {
-      summary: editSummary,
-      status: editStatus,
-      type: editType,
-      relatedRequirements: JSON.stringify(reqArray),
-      relatedBugs: JSON.stringify(bugArray),
-    })
-    setPlan(prev => prev ? {
-      ...prev,
-      summary: editSummary,
-      status: editStatus,
-      type: editType,
-      relatedRequirements: JSON.stringify(reqArray),
-      relatedBugs: JSON.stringify(bugArray),
-    } : null)
-    setEditDialogOpen(false)
-    toast({
-      title: '保存成功',
-      description: '计划信息已更新',
-    })
+    try {
+      const response = await fetch(`/api/plans/${plan!.id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          summary: editSummary,
+          relatedRequirements: reqArray,
+          relatedBugs: bugArray,
+        }),
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        // 刷新数据
+        await fetchPlan()
+        setEditDialogOpen(false)
+        toast({
+          title: '保存成功',
+          description: '计划信息已更新',
+        })
+      } else {
+        throw new Error(result.error || '保存失败')
+      }
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: '保存失败',
+        description: error instanceof Error ? error.message : '保存失败',
+      })
+    }
   }
 
   // 保存组件配置
@@ -372,8 +370,8 @@ export default function PlanDetailPage() {
 
   const progress = getUpgradeProgress()
 
-  const requirements = plan ? JSON.parse(plan.relatedRequirements || '[]') : []
-  const bugs = plan ? JSON.parse(plan.relatedBugs || '[]') : []
+  const requirements = plan ? (Array.isArray(plan.relatedRequirements) ? plan.relatedRequirements : []) : []
+  const bugs = plan ? (Array.isArray(plan.relatedBugs) ? plan.relatedBugs : []) : []
   const unresolvedBlockerCount = blockers.filter((item) => item.status !== 'resolved').length
 
   const getProgressPercent = (ready: number, total: number) => {
@@ -735,7 +733,7 @@ export default function PlanDetailPage() {
     }
   }
 
-  if (plansLoading) {
+  if (planLoading) {
     return (
       <div className="flex items-center justify-center h-full">
         <div className="text-muted-foreground">加载中...</div>
@@ -743,10 +741,10 @@ export default function PlanDetailPage() {
     )
   }
 
-  if (!plan) {
+  if (planError || !plan) {
     return (
       <div className="flex items-center justify-center h-full">
-        <div className="text-destructive">计划不存在</div>
+        <div className="text-destructive">{planError || '计划不存在'}</div>
       </div>
     )
   }

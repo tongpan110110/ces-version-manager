@@ -6,8 +6,7 @@ import { useRouter } from 'next/navigation'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Rocket, FileText, Package, TrendingUp, CalendarClock, AlertTriangle } from 'lucide-react'
-import { useDashboard } from '@/hooks/useLocalData'
-import { useRegions } from '@/hooks/useLocalData'
+import { useDashboard, useRegions, usePlans, useVersionLines } from '@/hooks/useAPI'
 import {
   Select,
   SelectContent,
@@ -52,22 +51,16 @@ export default function DashboardPage() {
   const router = useRouter()
   const { loading, data } = useDashboard()
   const { regions } = useRegions()
+  const { plans: allPlans } = usePlans()
   const [selectedVersionLine, setSelectedVersionLine] = useState<string>('')
   const [mounted, setMounted] = useState(false)
 
-  // 直接从 settings_versionLines 读取版本线数据
-  const [versionLinesData, setVersionLinesData] = useState<any[]>([])
+  // 使用 useVersionLines 获取版本线数据
+  const { versionLines } = useVersionLines()
 
   // 客户端挂载后再读取数据
   useEffect(() => {
     setMounted(true)
-    // 从系统设置读取版本线
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('settings_versionLines')
-      if (saved) {
-        setVersionLinesData(JSON.parse(saved))
-      }
-    }
   }, [])
 
   // 更新 URL 参数
@@ -78,31 +71,18 @@ export default function DashboardPage() {
     router.replace(`${url.pathname}${url.search}`)
   }, [router])
 
-  // 从 localStorage 读取所有计划数据
-  const [allPlans, setAllPlans] = useState<Plan[]>([])
-
-  useEffect(() => {
-    // 从 localStorage 读取所有计划数据
-    if (typeof window !== 'undefined') {
-      const stored = localStorage.getItem('ces_version_plans')
-      if (stored) {
-        setAllPlans(JSON.parse(stored))
-      }
-    }
-  }, [])
-
   useEffect(() => {
     // 优先从 URL 读取版本线，如果没有则使用最高版本线
-    if (mounted && data && versionLinesData.length > 0 && !selectedVersionLine) {
+    if (mounted && data && versionLines.length > 0 && !selectedVersionLine) {
       const urlParams = new URLSearchParams(typeof window !== 'undefined' ? window.location.search : '')
       const urlVersion = urlParams.get('version')
-      const isValidVersion = versionLinesData.some(vl => vl.versionLine === urlVersion)
+      const isValidVersion = versionLines.some(vl => vl.versionLine === urlVersion)
 
       if (urlVersion && isValidVersion) {
         setSelectedVersionLine(urlVersion)
       } else {
         // 使用最高版本线作为默认值
-        const sorted = [...versionLinesData].sort((a, b) => {
+        const sorted = [...versionLines].sort((a, b) => {
           const [aMajor, aMinor] = a.versionLine.split('.').map(Number)
           const [bMajor, bMinor] = b.versionLine.split('.').map(Number)
           if (aMajor !== bMajor) return bMajor - aMajor
@@ -148,7 +128,7 @@ export default function DashboardPage() {
   }
 
   const getBaselinePlan = (versionLine: string) => {
-    const baseline = versionLinesData.find(vl => vl.versionLine === versionLine)?.baseline
+    const baseline = versionLines.find(vl => vl.versionLine === versionLine)?.baseline
     return allPlans.find(p => p.version === baseline && p.versionLine === versionLine)
   }
 
@@ -357,7 +337,7 @@ export default function DashboardPage() {
           </p>
         </div>
         {/* 版本线选择器在右边 */}
-        {versionLinesData.length > 0 && (
+        {versionLines.length > 0 && (
           <Select
             value={selectedVersionLine}
             onValueChange={(value) => {
@@ -369,7 +349,7 @@ export default function DashboardPage() {
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {versionLinesData
+              {versionLines
                 .sort((a, b) => {
                   const [aMajor, aMinor] = a.versionLine.split('.').map(Number)
                   const [bMajor, bMinor] = b.versionLine.split('.').map(Number)
@@ -386,7 +366,7 @@ export default function DashboardPage() {
         )}
       </div>
 
-      {versionLinesData.length === 0 ? (
+      {versionLines.length === 0 ? (
         <Card className="glass">
           <CardContent className="py-12 text-center text-muted-foreground">
             暂无活跃版本线，请在系统设置中配置

@@ -20,7 +20,7 @@ import {
   TableRow,
 } from '@/components/ui/table'
 import { GitCompare, ArrowRight, Download, Package, FileText } from 'lucide-react'
-import { usePlans } from '@/hooks/useLocalData'
+import { usePlans } from '@/hooks/useAPI'
 import { useToast } from '@/hooks/use-toast'
 
 interface Plan {
@@ -109,139 +109,109 @@ export default function DiffPage() {
     return 0
   }
 
-  const handleCompare = () => {
+  const handleCompare = async () => {
     if (!planAId || !planBId) return
 
     setLoading(true)
 
-    const planA = plans.find(p => p.id === planAId)
-    const planB = plans.find(p => p.id === planBId)
+    try {
+      const response = await fetch(`/api/manifests/${planBId}/diff?compareTo=${planAId}`)
+      const result = await response.json()
 
-    if (!planA || !planB) {
+      if (!result.success) {
+        throw new Error(result.error || '对比失败')
+      }
+
+      const diffData = result.data
+
+      // 转换为前端需要的格式
+      const componentDiffs: ComponentDiff[] = diffData.diff.map((d: any) => {
+        // 映射 changeType
+        let changeType: 'upgrade' | 'unchanged' | 'added' | 'removed' = 'unchanged'
+        if (d.changeType === 'changed') {
+          // 判断是升级还是降级
+          const verA = d.versionA === '-' ? '0' : d.versionA
+          const verB = d.versionB === '-' ? '0' : d.versionB
+          changeType = verA < verB ? 'upgrade' : 'unchanged'
+        } else if (d.changeType === 'added') {
+          changeType = 'added'
+        } else if (d.changeType === 'removed') {
+          changeType = 'removed'
+        }
+
+        return {
+          componentName: d.componentName.replace(' (前端)', ''),
+          versionA: d.versionA,
+          versionB: d.versionB,
+          changeType,
+        }
+      })
+
+      // 排序：前端组件在前，后端组件按名称排序
+      componentDiffs.sort((a, b) => {
+        const compA = components.find(c => c.name === a.componentName)
+        const compB = components.find(c => c.name === b.componentName)
+        if (compA?.type === 'frontend' && compB?.type !== 'frontend') return -1
+        if (compA?.type !== 'frontend' && compB?.type === 'frontend') return 1
+        return a.componentName.localeCompare(b.componentName)
+      })
+
+      // 对比需求和缺陷（暂时保留原逻辑，因为 API 没有返回这些数据）
+      const planA = plans.find(p => p.id === planAId)
+      const planB = plans.find(p => p.id === planBId)
+
+      const reqsA = planA ? (Array.isArray(planA.relatedRequirements) ? planA.relatedRequirements : JSON.parse(planA.relatedRequirements || '[]')) : []
+      const reqsB = planB ? (Array.isArray(planB.relatedRequirements) ? planB.relatedRequirements : JSON.parse(planB.relatedRequirements || '[]')) : []
+      const bugsA = planA ? (Array.isArray(planA.relatedBugs) ? planA.relatedBugs : JSON.parse(planA.relatedBugs || '[]')) : []
+      const bugsB = planB ? (Array.isArray(planB.relatedBugs) ? planB.relatedBugs : JSON.parse(planB.relatedBugs || '[]')) : []
+
+      // 找出新增的需求
+      const newReqs = reqsB.filter((r: string) => !reqsA.includes(r))
+      // 找出新增的缺陷
+      const newBugs = bugsB.filter((b: string) => !bugsA.includes(b))
+
+      const newContent: NewContent[] = [
+        ...newReqs.map((req: string) => ({
+          id: req,
+          description: `需求 ${req}`,
+          type: 'requirement' as const,
+        })),
+        ...newBugs.map((bug: string) => ({
+          id: bug,
+          description: `缺陷 ${bug}`,
+          type: 'bug' as const,
+        })),
+      ].sort((a, b) => a.id.localeCompare(b.id))
+
+      setDiffResult({
+        planA: diffData.planA,
+        planB: diffData.planB,
+        componentDiffs,
+        newContent,
+      })
+
+      setLoading(false)
+
+      const changesCount = componentDiffs.filter(d => d.changeType !== 'unchanged').length
+      if (changesCount === 0 && newContent.length === 0) {
+        toast({
+          title: '对比完成',
+          description: '两个版本完全相同',
+        })
+      } else {
+        toast({
+          title: '对比完成',
+          description: `组件变更 ${changesCount} 处，新增内容 ${newContent.length} 项`,
+        })
+      }
+    } catch (error) {
+      console.error('对比失败:', error)
       toast({
         variant: 'destructive',
         title: '对比失败',
-        description: '未找到选中的版本',
+        description: error instanceof Error ? error.message : '对比失败',
       })
       setLoading(false)
-      return
-    }
-
-    // 获取两个版本的组件
-    const componentsA = getComponentsForPlan(planA.version)
-    const componentsB = getComponentsForPlan(planB.version)
-
-    // 对比组件
-    const componentMapA = new Map(componentsA.map(c => [c.name, c]))
-    const componentMapB = new Map(componentsB.map(c => [c.name, c]))
-
-    const componentDiffs: ComponentDiff[] = []
-
-    // 处理版本 A 中的组件
-    componentsA.forEach(compA => {
-      const compB = componentMapB.get(compA.name)
-      if (!compB) {
-        // 组件在版本 B 中不存在 - 下线
-        componentDiffs.push({
-          componentName: compA.name,
-          versionA: compA.version,
-          versionB: '-',
-          changeType: 'removed',
-        })
-      } else {
-        // 比较版本
-        const versionDiff = compareVersions(compA.version, compB.version)
-        if (versionDiff < 0) {
-          componentDiffs.push({
-            componentName: compA.name,
-            versionA: compA.version,
-            versionB: compB.version,
-            changeType: 'upgrade',
-          })
-        } else if (versionDiff > 0) {
-          // 版本降低（不常见，但处理）
-          componentDiffs.push({
-            componentName: compA.name,
-            versionA: compA.version,
-            versionB: compB.version,
-            changeType: 'upgrade', // 仍然显示为升级
-          })
-        } else {
-          componentDiffs.push({
-            componentName: compA.name,
-            versionA: compA.version,
-            versionB: compB.version,
-            changeType: 'unchanged',
-          })
-        }
-      }
-    })
-
-    // 处理版本 B 中新增的组件
-    componentsB.forEach(compB => {
-      if (!componentMapA.has(compB.name)) {
-        componentDiffs.push({
-          componentName: compB.name,
-          versionA: '-',
-          versionB: compB.version,
-          changeType: 'added',
-        })
-      }
-    })
-
-    // 排序：前端组件在前，后端组件按名称排序
-    componentDiffs.sort((a, b) => {
-      const compA = components.find(c => c.name === a.componentName)
-      const compB = components.find(c => c.name === b.componentName)
-      if (compA?.type === 'frontend' && compB?.type !== 'frontend') return -1
-      if (compA?.type !== 'frontend' && compB?.type === 'frontend') return 1
-      return a.componentName.localeCompare(b.componentName)
-    })
-
-    // 对比需求和缺陷
-    const reqsA = JSON.parse(planA.relatedRequirements || '[]')
-    const reqsB = JSON.parse(planB.relatedRequirements || '[]')
-    const bugsA = JSON.parse(planA.relatedBugs || '[]')
-    const bugsB = JSON.parse(planB.relatedBugs || '[]')
-
-    // 找出新增的需求
-    const newReqs = reqsB.filter((r: string) => !reqsA.includes(r))
-    // 找出新增的缺陷
-    const newBugs = bugsB.filter((b: string) => !bugsA.includes(b))
-
-    const newContent: NewContent[] = [
-      ...newReqs.map((req: string) => ({
-        id: req,
-        description: `需求 ${req}`, // 实际应用中应该从需求系统获取描述
-        type: 'requirement' as const,
-      })),
-      ...newBugs.map((bug: string) => ({
-        id: bug,
-        description: `缺陷 ${bug}`, // 实际应用中应该从缺陷系统获取描述
-        type: 'bug' as const,
-      })),
-    ].sort((a, b) => a.id.localeCompare(b.id))
-
-    setDiffResult({
-      planA: { id: planA.id, version: planA.version },
-      planB: { id: planB.id, version: planB.version },
-      componentDiffs,
-      newContent,
-    })
-
-    setLoading(false)
-
-    const changesCount = componentDiffs.filter(d => d.changeType !== 'unchanged').length
-    if (changesCount === 0 && newContent.length === 0) {
-      toast({
-        title: '对比完成',
-        description: '两个版本完全相同',
-      })
-    } else {
-      toast({
-        title: '对比完成',
-        description: `组件变更 ${changesCount} 处，新增内容 ${newContent.length} 项`,
-      })
     }
   }
 
