@@ -32,8 +32,8 @@ CREATE TABLE IF NOT EXISTS plans (
   type VARCHAR(50) NOT NULL COMMENT 'Feature Release, Update Release, Patch',
   status VARCHAR(50) NOT NULL DEFAULT 'draft' COMMENT 'draft, testing, ready, released, upgrading, completed, deprecated',
   summary TEXT NOT NULL,
-  related_requirements TEXT DEFAULT '[]' COMMENT 'JSON 数组',
-  related_bugs TEXT DEFAULT '[]' COMMENT 'JSON 数组',
+  related_requirements TEXT,
+  related_bugs TEXT,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   INDEX idx_status (status),
@@ -91,7 +91,7 @@ CREATE TABLE IF NOT EXISTS plan_delays (
   plan_id VARCHAR(255) NOT NULL,
   delay_key VARCHAR(50) NOT NULL COMMENT 'package, upgradeWindow 等',
   delay_type VARCHAR(50) DEFAULT '' COMMENT '需求变更, 技术问题等',
-  delay_reason TEXT DEFAULT '',
+  delay_reason TEXT,
   owner VARCHAR(255) DEFAULT '',
   recorded_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   FOREIGN KEY (plan_id) REFERENCES plans(id) ON DELETE CASCADE,
@@ -112,7 +112,7 @@ CREATE TABLE IF NOT EXISTS version_lines (
 CREATE TABLE IF NOT EXISTS components (
   id INT AUTO_INCREMENT PRIMARY KEY,
   name VARCHAR(255) NOT NULL UNIQUE,
-  description TEXT DEFAULT '',
+  description TEXT,
   type VARCHAR(50) NOT NULL COMMENT 'frontend, backend',
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
@@ -122,7 +122,7 @@ CREATE TABLE IF NOT EXISTS components (
 CREATE TABLE IF NOT EXISTS system_configs (
   id INT AUTO_INCREMENT PRIMARY KEY,
   config_key VARCHAR(255) NOT NULL UNIQUE COMMENT 'baseline_25.8, baseline_25.10, active_version_lines',
-  config_value TEXT NOT NULL COMMENT '可以是字符串、JSON等',
+  config_value TEXT NOT NULL,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
