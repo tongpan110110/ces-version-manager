@@ -192,20 +192,6 @@ export async function PUT(
       [planId]
     )
 
-    // Create audit log
-    await insert(
-      `INSERT INTO audit_logs (entity_type, entity_id, action, old_value, new_value, operator, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, NOW())`,
-      [
-        'plan',
-        planId,
-        'update',
-        JSON.stringify(existingPlan),
-        JSON.stringify(plan),
-        'system'
-      ]
-    )
-
     const responseData = {
       id: plan.id,
       version: plan.version,
@@ -258,21 +244,6 @@ export async function DELETE(
     const plan = await queryOne(
       'SELECT * FROM plans WHERE id = ?',
       [planId]
-    )
-
-    // Create audit log
-    await insert(
-      `INSERT INTO audit_logs (entity_type, entity_id, action, field, old_value, new_value, operator, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [
-        'plan',
-        planId,
-        'delete',
-        'status',
-        existingPlan.status,
-        'deprecated',
-        'system'
-      ]
     )
 
     const responseData = {
