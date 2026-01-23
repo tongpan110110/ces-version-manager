@@ -1,5 +1,6 @@
 import { NextResponse } from 'next/server'
 import { query, queryOne } from '@/lib/db'
+import { INIT_PLANS, INIT_REGIONS, INIT_CONFIGS } from '@/lib/init-data'
 
 // GET /api/dashboard - Get dashboard statistics
 export async function GET() {
@@ -116,41 +117,74 @@ export async function GET() {
     })
   } catch (error: any) {
     console.error('Error fetching dashboard data:', error)
-    // Return fallback data for development
+    // 从 init-data.ts 加载初始化数据并计算统计信息
+    const plans = INIT_PLANS
+    const regions = INIT_REGIONS
+    const configs = INIT_CONFIGS
+
+    // Get active version lines
+    const activeVersionLines: string[] = JSON.parse(configs.active_version_lines || '["25.8","25.10"]')
+
+    // Calculate stats
+    const totalPlans = plans.length
+    const draftPlans = plans.filter((p) => p.status === 'draft').length
+    const testingPlans = plans.filter((p) => p.status === 'testing').length
+    const readyPlans = plans.filter((p) => p.status === 'ready').length
+    const releasedPlans = plans.filter((p) => p.status === 'released').length
+    const totalRegions = regions.length
+
+    // Calculate version line stats
+    const versionLineStats = activeVersionLines.map((versionLine) => {
+      const baseline = (configs as Record<string, string>)[`baseline_${versionLine}`] || ''
+      const baselinePlan = plans.find((p) => p.version === baseline)
+
+      // Get regions on this version line (based on their backendVersion)
+      const regionsOnLine = regions.filter((r) => {
+        if (!r.backendVersion) return false
+        const parts = r.backendVersion.split('.')
+        const regionVersionLine = parts.length >= 2 ? `${parts[0]}.${parts[1]}` : ''
+        return regionVersionLine === versionLine
+      })
+
+      const atBaseline = baselinePlan
+        ? regionsOnLine.filter((r) => r.backendVersion === baseline).length
+        : 0
+      const behindBaseline = regionsOnLine.length - atBaseline
+
+      return {
+        versionLine,
+        baseline,
+        totalRegions: regionsOnLine.length,
+        atBaseline,
+        behindBaseline,
+        alignmentRate: regionsOnLine.length > 0 ? Math.round((atBaseline / regionsOnLine.length) * 100) : 0,
+        coverage: totalRegions > 0 ? Math.round((regionsOnLine.length / totalRegions) * 100) : 0,
+      }
+    })
+
+    const totalAlignedRegions = versionLineStats.reduce((sum, vl) => sum + vl.atBaseline, 0)
+    const overallAlignmentRate = totalRegions > 0 ? Math.round((totalAlignedRegions / totalRegions) * 100) : 0
+
+    // Get recent plans
+    const recentPlans = [...plans]
+      .sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime())
+      .slice(0, 5)
+
     return NextResponse.json({
       success: true,
       data: {
         stats: {
-          totalPlans: 0,
-          draftPlans: 0,
-          testingPlans: 0,
-          readyPlans: 0,
-          releasedPlans: 0,
-          totalRegions: 37,
-          totalAlignedRegions: 22,
-          overallAlignmentRate: 60,
+          totalPlans,
+          draftPlans,
+          testingPlans,
+          readyPlans,
+          releasedPlans,
+          totalRegions,
+          totalAlignedRegions,
+          overallAlignmentRate,
         },
-        versionLines: [
-          {
-            versionLine: '25.8',
-            baseline: '25.8.2',
-            totalRegions: 37,
-            atBaseline: 22,
-            behindBaseline: 15,
-            alignmentRate: 60,
-            coverage: 100,
-          },
-          {
-            versionLine: '25.10',
-            baseline: '25.10.0',
-            totalRegions: 37,
-            atBaseline: 0,
-            behindBaseline: 37,
-            alignmentRate: 0,
-            coverage: 100,
-          },
-        ],
-        recentPlans: [],
+        versionLines: versionLineStats,
+        recentPlans,
         recentLogs: [],
       },
     })

@@ -5,17 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query, queryOne, insert, update, remove } from '@/lib/db'
-
-// 从 localStorage 读取数据（MySQL 不可用时的备用方案）
-function getLocalStorageData(key: string): any {
-  if (typeof window === 'undefined') return null
-  try {
-    const data = localStorage.getItem(key)
-    return data ? JSON.parse(data) : null
-  } catch {
-    return null
-  }
-}
+import { INIT_REGIONS } from '@/lib/init-data'
 
 // 局点接口
 export interface Region {
@@ -41,23 +31,9 @@ export async function GET() {
 
     return NextResponse.json({ success: true, data: rows })
   } catch (error: any) {
-    // MySQL 不可用，尝试从 localStorage 读取（仅在开发环境）
-    if (process.env.NODE_ENV === 'development') {
-      try {
-        const { generateInitRegions } = require('@/lib/init-data')
-        const mockRegions = generateInitRegions()
-        return NextResponse.json({ success: true, data: mockRegions })
-      } catch (e) {
-        // 如果连初始化数据都没有，返回空数组
-        return NextResponse.json({ success: true, data: [] })
-      }
-    }
-
-    console.error('获取局点失败:', error)
-    return NextResponse.json(
-      { success: false, error: error.message || '获取局点失败' },
-      { status: 500 }
-    )
+    // MySQL 不可用，从 init-data.ts 加载数据
+    console.log('MySQL 未连接，从 init-data.ts 加载局点列表')
+    return NextResponse.json({ success: true, data: INIT_REGIONS })
   }
 }
 

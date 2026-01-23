@@ -4,6 +4,7 @@
 
 import { NextResponse } from 'next/server'
 import { query } from '@/lib/db'
+import { INIT_CONFIGS } from '@/lib/init-data'
 
 // GET 获取所有版本线
 export async function GET() {
@@ -16,14 +17,19 @@ export async function GET() {
 
     return NextResponse.json({ success: true, data: rows })
   } catch (error: any) {
-    // MySQL 不可用，返回默认版本线
-    console.log('MySQL 未连接，返回默认版本线')
+    // MySQL 不可用，从 init-data.ts 的 CONFIGS 推导版本线
+    console.log('MySQL 未连接，从 init-data.ts 加载版本线')
+    const activeVersionLines: string[] = JSON.parse(INIT_CONFIGS.active_version_lines || '["25.8","25.10"]')
+
+    const versionLines = activeVersionLines.map(versionLine => ({
+      versionLine,
+      baseline: (INIT_CONFIGS as Record<string, string>)[`baseline_${versionLine}`] || '',
+      isActive: true,
+    }))
+
     return NextResponse.json({
       success: true,
-      data: [
-        { versionLine: '25.8', baseline: '25.8.2', isActive: true },
-        { versionLine: '25.10', baseline: '25.10.0', isActive: true }
-      ]
+      data: versionLines,
     })
   }
 }

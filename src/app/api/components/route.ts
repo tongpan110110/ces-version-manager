@@ -4,6 +4,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query, insert, update, remove } from '@/lib/db'
+import { INIT_COMPONENTS } from '@/lib/init-data'
 
 // GET 获取所有组件
 export async function GET() {
@@ -16,11 +17,9 @@ export async function GET() {
 
     return NextResponse.json({ success: true, data: rows })
   } catch (error: any) {
-    console.error('获取组件失败:', error)
-    return NextResponse.json(
-      { success: false, error: error.message || '获取组件失败' },
-      { status: 500 }
-    )
+    // MySQL 不可用，从 init-data.ts 加载数据
+    console.log('MySQL 未连接，从 init-data.ts 加载组件列表')
+    return NextResponse.json({ success: true, data: INIT_COMPONENTS })
   }
 }
 

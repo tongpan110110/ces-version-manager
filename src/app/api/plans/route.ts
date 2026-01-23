@@ -5,6 +5,7 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { query, queryOne, insert, update, remove } from '@/lib/db'
+import { INIT_PLANS } from '@/lib/init-data'
 
 // GET 获取所有计划
 export async function GET(request: NextRequest) {
@@ -41,9 +42,31 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({ success: true, data: rows })
   } catch (error: any) {
-    // MySQL 不可用，返回空数组
-    console.log('MySQL 未连接，返回空计划列表')
-    return NextResponse.json({ success: true, data: [] })
+    // MySQL 不可用，从 init-data.ts 加载数据
+    console.log('MySQL 未连接，从 init-data.ts 加载计划列表')
+    let plans = INIT_PLANS
+
+    // 应用过滤条件
+    const { searchParams } = new URL(request.url)
+    const status = searchParams.get('status')
+    const versionLine = searchParams.get('versionLine')
+    const search = searchParams.get('search')
+
+    if (status && status !== 'all') {
+      plans = plans.filter(p => p.status === status)
+    }
+    if (versionLine && versionLine !== 'all') {
+      plans = plans.filter(p => p.versionLine === versionLine)
+    }
+    if (search) {
+      const searchLower = search.toLowerCase()
+      plans = plans.filter(p =>
+        p.version.toLowerCase().includes(searchLower) ||
+        p.summary.toLowerCase().includes(searchLower)
+      )
+    }
+
+    return NextResponse.json({ success: true, data: plans })
   }
 }
 
