@@ -18,62 +18,54 @@ export async function GET(
       )
     }
 
-    // Get both manifests with their plans and components in parallel
-    const [manifestARaw, manifestBRaw] = await Promise.all([
-      queryOne<any>(
-        `SELECT * FROM manifests WHERE plan_id = ?`,
+    // Get both plans and their components in parallel
+    const [planA, planB, componentsA, componentsB] = await Promise.all([
+      queryOne<any>(`SELECT * FROM plans WHERE id = ?`, [planId]),
+      queryOne<any>(`SELECT * FROM plans WHERE id = ?`, [compareToId]),
+      query<any>(
+        `SELECT * FROM plan_components WHERE plan_id = ? ORDER BY component_name ASC`,
         [planId]
       ),
-      queryOne<any>(
-        `SELECT * FROM manifests WHERE plan_id = ?`,
+      query<any>(
+        `SELECT * FROM plan_components WHERE plan_id = ? ORDER BY component_name ASC`,
         [compareToId]
       ),
     ])
 
-    if (!manifestARaw || !manifestBRaw) {
+    if (!planA || !planB) {
       return NextResponse.json(
-        { success: false, error: '交付套件不存在' },
+        { success: false, error: '版本计划不存在' },
         { status: 404 }
       )
-    }
-
-    // Get plans and components in parallel
-    const [planA, planB, componentsA, componentsB] = await Promise.all([
-      queryOne<any>(`SELECT * FROM plans WHERE id = ?`, [manifestARaw.plan_id]),
-      queryOne<any>(`SELECT * FROM plans WHERE id = ?`, [manifestBRaw.plan_id]),
-      query<any>(
-        `SELECT * FROM manifest_components WHERE manifest_id = ? ORDER BY component_name ASC`,
-        [manifestARaw.id]
-      ),
-      query<any>(
-        `SELECT * FROM manifest_components WHERE manifest_id = ? ORDER BY component_name ASC`,
-        [manifestBRaw.id]
-      ),
-    ])
-
-    // Build full manifest objects with relations
-    const manifestA = {
-      ...manifestARaw,
-      plan: planA,
-      components: componentsA,
-    }
-
-    const manifestB = {
-      ...manifestBRaw,
-      plan: planB,
-      components: componentsB,
     }
 
     // Build diff result
     const diff: any[] = []
 
-    // Compare frontend
-    if (manifestA.frontendVersion !== manifestB.frontendVersion) {
+    // Compare frontend (从组件中找前端组件)
+    const frontendA = componentsA.find(c => c.component_type === 'frontend')
+    const frontendB = componentsB.find(c => c.component_type === 'frontend')
+
+    if (frontendA && frontendB && frontendA.target_version !== frontendB.target_version) {
       diff.push({
-        componentName: 'CES-Portal (前端)',
-        versionA: manifestA.frontendVersion,
-        versionB: manifestB.frontendVersion,
+        componentName: `${frontendA.component_name} (前端)`,
+        versionA: frontendA.target_version,
+        versionB: frontendB.target_version,
         changeType: 'changed',
+      })
+    } else if (frontendA && !frontendB) {
+      diff.push({
+        componentName: `${frontendA.component_name} (前端)`,
+        versionA: frontendA.target_version,
+        versionB: '-',
+        changeType: 'removed',
+      })
+    } else if (!frontendA && frontendB) {
+      diff.push({
+        componentName: `${frontendB.component_name} (前端)`,
+        versionA: '-',
+        versionB: frontendB.target_version,
+        changeType: 'added',
       })
     }
 
@@ -101,7 +93,6 @@ export async function GET(
           versionA: '-',
           versionB: compB.target_version,
           changeType: 'added',
-          reasonB: compB.change_reason,
         })
       } else if (compA && !compB) {
         diff.push({
@@ -109,7 +100,6 @@ export async function GET(
           versionA: compA.target_version,
           versionB: '-',
           changeType: 'removed',
-          reasonA: compA.change_reason,
         })
       } else if (compA && compB && compA.target_version !== compB.target_version) {
         diff.push({
@@ -117,8 +107,6 @@ export async function GET(
           versionA: compA.target_version,
           versionB: compB.target_version,
           changeType: 'changed',
-          reasonA: compA.change_reason,
-          reasonB: compB.change_reason,
         })
       }
     }
