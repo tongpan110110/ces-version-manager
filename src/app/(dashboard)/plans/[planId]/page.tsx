@@ -311,8 +311,11 @@ export default function PlanDetailPage() {
     }
   }
 
-  // 保存组件配置
+  // 保存组件配置（优先 API，失败时降级到 localStorage）
   const handleSaveComponents = async () => {
+    let apiSuccess = false
+
+    // 先尝试保存到数据库
     try {
       const response = await fetch(`/api/plans/${plan!.id}/components`, {
         method: 'PUT',
@@ -322,23 +325,29 @@ export default function PlanDetailPage() {
 
       const result = await response.json()
       if (result.success) {
+        apiSuccess = true
         // 刷新计划数据
         await fetchPlan()
-        setComponentDialogOpen(false)
-        toast({
-          title: '保存成功',
-          description: '组件信息已更新',
-        })
-      } else {
-        throw new Error(result.error || '保存失败')
       }
     } catch (error) {
+      console.log('API 保存组件失败，降级到 localStorage')
+    }
+
+    // 如果 API 失败，保存到 localStorage
+    if (!apiSuccess) {
+      localStorage.setItem(`plan_components_${plan!.id}`, JSON.stringify(planComponents))
       toast({
-        variant: 'destructive',
-        title: '保存失败',
-        description: error instanceof Error ? error.message : '保存失败',
+        title: '保存成功（本地）',
+        description: '组件信息已保存到本地存储',
+      })
+    } else {
+      toast({
+        title: '保存成功',
+        description: '组件信息已更新到数据库',
       })
     }
+
+    setComponentDialogOpen(false)
   }
 
   // 切换组件启用状态

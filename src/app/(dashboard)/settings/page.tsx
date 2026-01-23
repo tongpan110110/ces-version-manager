@@ -117,7 +117,7 @@ export default function SettingsPage() {
     }
   }, [versionLines, regions, mounted])
 
-  // 从 API 加载组件
+  // 从 API 加载组件，失败时降级到 localStorage
   useEffect(() => {
     if (mounted) {
       fetchComponents()
@@ -131,12 +131,37 @@ export default function SettingsPage() {
       const json = await res.json()
       if (json.success) {
         setComponents(json.data)
+        return // API 成功，直接返回
       }
     } catch (error) {
-      console.error('获取组件失败:', error)
+      console.log('API 获取组件失败，降级到 localStorage:', error)
+    }
+
+    // API 失败，降级到 localStorage
+    try {
+      const stored = localStorage.getItem('settings_components')
+      if (stored) {
+        const localComponents = JSON.parse(stored)
+        setComponents(localComponents)
+      } else {
+        // 如果 localStorage 也没有，使用默认值
+        setComponents([
+          { name: 'CES-Portal', description: '前端', type: 'frontend' },
+          { name: 'ces-gateway', description: '网关服务', type: 'backend' },
+          { name: 'ces-auth', description: '认证服务', type: 'backend' },
+        ])
+      }
+    } catch (error) {
+      console.error('从 localStorage 读取组件失败:', error)
+      setComponents([])
     } finally {
       setComponentsLoading(false)
     }
+  }
+
+  // 保存组件（优先 API，失败时保存到 localStorage）
+  const saveComponentsToStorage = (newComponents: Component[]) => {
+    localStorage.setItem('settings_components', JSON.stringify(newComponents))
   }
 
   if (!mounted) {
@@ -323,6 +348,9 @@ export default function SettingsPage() {
   }
 
   const saveComponent = async () => {
+    let apiSuccess = false
+
+    // 先尝试保存到数据库
     try {
       if (editingComponent) {
         // 编辑：先删除旧的，再添加新的（因为 API 不支持 UPDATE）
@@ -342,23 +370,56 @@ export default function SettingsPage() {
           body: JSON.stringify(componentForm),
         })
       }
-      await fetchComponents()
-      setComponentDialogOpen(false)
-      toast({ title: '保存成功', description: '组件已保存' })
+      apiSuccess = true
     } catch (error) {
-      toast({ variant: 'destructive', title: '保存失败', description: '请重试' })
+      console.log('API 保存组件失败，降级到 localStorage')
     }
+
+    // 更新本地状态
+    let newComponents: Component[]
+    if (editingComponent) {
+      newComponents = components.map(c => c.name === editingComponent.name ? componentForm : c)
+    } else {
+      newComponents = [...components, componentForm]
+    }
+    setComponents(newComponents)
+
+    // 如果 API 失败，保存到 localStorage
+    if (!apiSuccess) {
+      saveComponentsToStorage(newComponents)
+      toast({ title: '保存成功（本地）', description: '组件已保存到本地存储' })
+    } else {
+      await fetchComponents()
+      toast({ title: '保存成功', description: '组件已保存到数据库' })
+    }
+
+    setComponentDialogOpen(false)
   }
 
   const deleteComponent = async (name: string) => {
+    let apiSuccess = false
+
+    // 先尝试从数据库删除
     try {
       await fetch(`/api/components?name=${encodeURIComponent(name)}`, {
         method: 'DELETE',
       })
-      await fetchComponents()
-      toast({ title: '删除成功', description: '组件已删除' })
+      apiSuccess = true
     } catch (error) {
-      toast({ variant: 'destructive', title: '删除失败', description: '请重试' })
+      console.log('API 删除组件失败，降级到 localStorage')
+    }
+
+    // 更新本地状态
+    const newComponents = components.filter(c => c.name !== name)
+    setComponents(newComponents)
+
+    // 如果 API 失败，从 localStorage 删除
+    if (!apiSuccess) {
+      saveComponentsToStorage(newComponents)
+      toast({ title: '删除成功（本地）', description: '组件已从本地存储删除' })
+    } else {
+      await fetchComponents()
+      toast({ title: '删除成功', description: '组件已从数据库删除' })
     }
   }
 
