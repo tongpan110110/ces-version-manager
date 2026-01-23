@@ -200,12 +200,17 @@ export default function PlanDetailPage() {
       setEditRequirements(reqs.join(', '))
       setEditBugs(bugs.join(', '))
 
-      // 加载该计划的组件配置 - 暂时从 localStorage 读取
-      const storedComponents = localStorage.getItem(`plan_components_${plan.id}`)
-      if (storedComponents) {
-        setPlanComponents(JSON.parse(storedComponents))
+      // 加载该计划的组件配置 - 优先使用数据库 API 返回的数据
+      if (plan.components && Array.isArray(plan.components)) {
+        setPlanComponents(plan.components)
       } else {
-        setPlanComponents([])
+        // 如果 API 没有返回组件数据，尝试从 localStorage 读取（降级处理）
+        const storedComponents = localStorage.getItem(`plan_components_${plan.id}`)
+        if (storedComponents) {
+          setPlanComponents(JSON.parse(storedComponents))
+        } else {
+          setPlanComponents([])
+        }
       }
 
       const storedTimeline = localStorage.getItem(`plan_timeline_${plan.id}`)
@@ -233,12 +238,25 @@ export default function PlanDetailPage() {
     }
   }, [plan])
 
-  // 加载系统组件库
+  // 加载系统组件库（从数据库 API）
   useEffect(() => {
-    const stored = localStorage.getItem('settings_components')
-    if (stored) {
-      setAllComponents(JSON.parse(stored))
+    const fetchAllComponents = async () => {
+      try {
+        const res = await fetch('/api/components')
+        const json = await res.json()
+        if (json.success) {
+          setAllComponents(json.data)
+        }
+      } catch (error) {
+        console.error('获取组件库失败:', error)
+        // 如果 API 失败，尝试从 localStorage 读取（降级处理）
+        const stored = localStorage.getItem('settings_components')
+        if (stored) {
+          setAllComponents(JSON.parse(stored))
+        }
+      }
     }
+    fetchAllComponents()
   }, [])
 
   useEffect(() => {
@@ -294,13 +312,33 @@ export default function PlanDetailPage() {
   }
 
   // 保存组件配置
-  const handleSaveComponents = () => {
-    localStorage.setItem(`plan_components_${plan!.id}`, JSON.stringify(planComponents))
-    setComponentDialogOpen(false)
-    toast({
-      title: '保存成功',
-      description: '组件信息已更新',
-    })
+  const handleSaveComponents = async () => {
+    try {
+      const response = await fetch(`/api/plans/${plan!.id}/components`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ components: planComponents }),
+      })
+
+      const result = await response.json()
+      if (result.success) {
+        // 刷新计划数据
+        await fetchPlan()
+        setComponentDialogOpen(false)
+        toast({
+          title: '保存成功',
+          description: '组件信息已更新',
+        })
+      } else {
+        throw new Error(result.error || '保存失败')
+      }
+    } catch (error) {
+      toast({
+        variant: 'destructive',
+        title: '保存失败',
+        description: error instanceof Error ? error.message : '保存失败',
+      })
+    }
   }
 
   // 切换组件启用状态
