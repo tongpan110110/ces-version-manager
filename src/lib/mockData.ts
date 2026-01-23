@@ -1,4 +1,5 @@
 // 模拟数据 - 用于纯前端演示
+import { generateInitRegions } from './init-data'
 
 export const INITIAL_PLANS = [
   {
@@ -63,22 +64,10 @@ export const INITIAL_PLANS = [
   },
 ]
 
-export const INITIAL_REGIONS = [
-  { id: '1', name: '广州友好', area: 'domestic', backendVersion: '25.10.0', frontendVersion: '25.10.0', targetVersion: '25.10.0', backendReady: true, frontendReady: true },
-  { id: '2', name: '北京四', area: 'domestic', backendVersion: '25.10.0', frontendVersion: '25.10.0', targetVersion: '25.10.0', backendReady: true, frontendReady: true },
-  { id: '3', name: '广州', area: 'domestic', backendVersion: '25.10.0', frontendVersion: '25.10.0', targetVersion: '25.10.0', backendReady: true, frontendReady: true },
-  { id: '4', name: '上海一', area: 'domestic', backendVersion: '25.10.0', frontendVersion: '25.10.0', targetVersion: '25.10.0', backendReady: true, frontendReady: true },
-  { id: '5', name: '华东二', area: 'domestic', backendVersion: '25.8.2', frontendVersion: '25.8.3', targetVersion: '25.10.0', backendReady: true, frontendReady: true },
-  { id: '6', name: '贵阳一', area: 'domestic', backendVersion: '25.8.2', frontendVersion: '25.8.3', targetVersion: '25.10.0', backendReady: true, frontendReady: true },
-  { id: '7', name: '香港', area: 'domestic', backendVersion: '25.8.2', frontendVersion: '25.8.3', targetVersion: '25.10.0', backendReady: true, frontendReady: true },
-  { id: '8', name: '曼谷', area: 'apac', backendVersion: '25.8.1', frontendVersion: '25.8.2', targetVersion: '25.8.2', backendReady: true, frontendReady: true },
-  { id: '9', name: '新加坡', area: 'apac', backendVersion: '25.8.1', frontendVersion: '25.8.2', targetVersion: '25.8.2', backendReady: true, frontendReady: true },
-  { id: '10', name: '雅加达', area: 'apac', backendVersion: '25.8.1', frontendVersion: '25.8.2', targetVersion: '25.8.2', backendReady: true, frontendReady: true },
-  { id: '11', name: '利雅得', area: 'apac', backendVersion: '25.8.1', frontendVersion: '25.8.2', targetVersion: '25.8.2', backendReady: true, frontendReady: false },
-  { id: '12', name: '约翰内斯堡', area: 'africa', backendVersion: '25.8.0', frontendVersion: '25.8.1', targetVersion: '25.8.2', backendReady: true, frontendReady: true },
-  { id: '13', name: '墨西哥城一', area: 'latam', backendVersion: '25.8.1', frontendVersion: '25.8.2', targetVersion: '25.8.2', backendReady: true, frontendReady: true },
-  { id: '14', name: '圣保罗一', area: 'latam', backendVersion: '25.8.1', frontendVersion: '25.8.2', targetVersion: '25.8.2', backendReady: true, frontendReady: true },
-]
+export const INITIAL_REGIONS = generateInitRegions().map((region, index) => ({
+  ...region,
+  id: String(index + 1),
+}))
 
 export const INITIAL_REGION_VERSIONS = [
   { regionId: '1', planId: '5', backendReady: true, frontendReady: true }, // 广州友好 -> 25.10.1
