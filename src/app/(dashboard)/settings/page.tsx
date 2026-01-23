@@ -57,7 +57,6 @@ interface Component {
 interface ImportData {
   versionLines?: VersionLine[]
   regions?: Region[]
-  components?: Component[]
   plans?: any[]
 }
 
@@ -102,31 +101,43 @@ export default function SettingsPage() {
     return []
   })
 
-  const [components, setComponents] = useState<Component[]>(() => {
-    if (typeof window !== 'undefined') {
-      const saved = localStorage.getItem('settings_components')
-      if (saved) return JSON.parse(saved)
-    }
-    return [
-      { name: 'CES-Portal', description: '前端', type: 'frontend' },
-      { name: 'ces-gateway', description: '网关服务', type: 'backend' },
-      { name: 'ces-auth', description: '认证服务', type: 'backend' },
-    ]
-  })
+  const [components, setComponents] = useState<Component[]>([])
+  const [componentsLoading, setComponentsLoading] = useState(true)
 
   // 确保只在客户端挂载后渲染
   useEffect(() => {
     setMounted(true)
   }, [])
 
-  // 当数据变化时自动保存到 localStorage
+  // 当数据变化时自动保存到 localStorage（仅 versionLines 和 regions）
   useEffect(() => {
     if (mounted) {
       localStorage.setItem('settings_versionLines', JSON.stringify(versionLines))
       localStorage.setItem('settings_regions', JSON.stringify(regions))
-      localStorage.setItem('settings_components', JSON.stringify(components))
     }
-  }, [versionLines, regions, components, mounted])
+  }, [versionLines, regions, mounted])
+
+  // 从 API 加载组件
+  useEffect(() => {
+    if (mounted) {
+      fetchComponents()
+    }
+  }, [mounted])
+
+  const fetchComponents = async () => {
+    setComponentsLoading(true)
+    try {
+      const res = await fetch('/api/components')
+      const json = await res.json()
+      if (json.success) {
+        setComponents(json.data)
+      }
+    } catch (error) {
+      console.error('获取组件失败:', error)
+    } finally {
+      setComponentsLoading(false)
+    }
+  }
 
   if (!mounted) {
     return (
@@ -136,11 +147,10 @@ export default function SettingsPage() {
     )
   }
 
-  // 保存到 localStorage
+  // 保存到 localStorage（仅 versionLines 和 regions）
   const saveToLocalStorage = () => {
     localStorage.setItem('settings_versionLines', JSON.stringify(versionLines))
     localStorage.setItem('settings_regions', JSON.stringify(regions))
-    localStorage.setItem('settings_components', JSON.stringify(components))
   }
 
   // JSON 导出
@@ -157,12 +167,8 @@ export default function SettingsPage() {
         data = { regions }
         filename = 'regions.json'
         break
-      case '组件':
-        data = { components }
-        filename = 'components.json'
-        break
       case '全部数据':
-        data = { versionLines, regions, components }
+        data = { versionLines, regions }
         filename = 'all-data.json'
         break
     }
@@ -216,15 +222,6 @@ export default function SettingsPage() {
               return
             }
             break
-          case '组件':
-            if (data.components && Array.isArray(data.components)) {
-              setComponents(data.components)
-              hasData = true
-            } else {
-              toast({ variant: 'destructive', title: '导入失败', description: 'JSON 中缺少 components 字段' })
-              return
-            }
-            break
           case '全部数据':
             if (data.versionLines && Array.isArray(data.versionLines)) {
               setVersionLines(data.versionLines)
@@ -232,10 +229,6 @@ export default function SettingsPage() {
             }
             if (data.regions && Array.isArray(data.regions)) {
               setRegions(data.regions)
-              hasData = true
-            }
-            if (data.components && Array.isArray(data.components)) {
-              setComponents(data.components)
               hasData = true
             }
             if (!hasData) {
@@ -329,19 +322,44 @@ export default function SettingsPage() {
     setComponentDialogOpen(true)
   }
 
-  const saveComponent = () => {
-    if (editingComponent) {
-      setComponents(components.map(c => c.name === editingComponent.name ? componentForm : c))
-    } else {
-      setComponents([...components, componentForm])
+  const saveComponent = async () => {
+    try {
+      if (editingComponent) {
+        // 编辑：先删除旧的，再添加新的（因为 API 不支持 UPDATE）
+        await fetch(`/api/components?name=${encodeURIComponent(editingComponent.name)}`, {
+          method: 'DELETE',
+        })
+        await fetch('/api/components', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(componentForm),
+        })
+      } else {
+        // 新增
+        await fetch('/api/components', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(componentForm),
+        })
+      }
+      await fetchComponents()
+      setComponentDialogOpen(false)
+      toast({ title: '保存成功', description: '组件已保存' })
+    } catch (error) {
+      toast({ variant: 'destructive', title: '保存失败', description: '请重试' })
     }
-    setComponentDialogOpen(false)
-    toast({ title: '保存成功', description: '组件已保存' })
   }
 
-  const deleteComponent = (name: string) => {
-    setComponents(components.filter(c => c.name !== name))
-    toast({ title: '删除成功', description: '组件已删除' })
+  const deleteComponent = async (name: string) => {
+    try {
+      await fetch(`/api/components?name=${encodeURIComponent(name)}`, {
+        method: 'DELETE',
+      })
+      await fetchComponents()
+      toast({ title: '删除成功', description: '组件已删除' })
+    } catch (error) {
+      toast({ variant: 'destructive', title: '删除失败', description: '请重试' })
+    }
   }
 
   return (
@@ -503,16 +521,7 @@ export default function SettingsPage() {
       <Card className="glass">
         <CardHeader className="flex flex-row items-center justify-between pb-3">
           <CardTitle className="text-base">组件管理</CardTitle>
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => importJson('组件')}>
-              <Upload className="h-3 w-3 mr-1" />
-              导入
-            </Button>
-            <Button variant="outline" size="sm" onClick={() => exportJson('组件')}>
-              <Download className="h-3 w-3 mr-1" />
-              导出
-            </Button>
-          </div>
+          <span className="text-xs text-muted-foreground">数据来自数据库</span>
         </CardHeader>
         <CardContent>
           <Table>
@@ -525,25 +534,39 @@ export default function SettingsPage() {
               </TableRow>
             </TableHeader>
             <TableBody>
-              {components.map((component) => (
-                <TableRow key={component.name}>
-                  <TableCell className="font-mono">{component.name}</TableCell>
-                  <TableCell>{component.description}</TableCell>
-                  <TableCell>
-                    <Badge variant={component.type === 'frontend' ? 'secondary' : 'outline'}>
-                      {component.type === 'frontend' ? '前端' : '后端'}
-                    </Badge>
-                  </TableCell>
-                  <TableCell className="text-right">
-                    <Button variant="ghost" size="sm" onClick={() => openComponentDialog(component)}>
-                      <Edit className="h-3 w-3" />
-                    </Button>
-                    <Button variant="ghost" size="sm" onClick={() => deleteComponent(component.name)}>
-                      <Trash2 className="h-3 w-3 text-destructive" />
-                    </Button>
+              {componentsLoading ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground text-sm">
+                    加载中...
                   </TableCell>
                 </TableRow>
-              ))}
+              ) : components.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={4} className="text-center text-muted-foreground text-sm">
+                    暂无组件数据，请添加组件
+                  </TableCell>
+                </TableRow>
+              ) : (
+                components.map((component) => (
+                  <TableRow key={component.name}>
+                    <TableCell className="font-mono">{component.name}</TableCell>
+                    <TableCell>{component.description}</TableCell>
+                    <TableCell>
+                      <Badge variant={component.type === 'frontend' ? 'secondary' : 'outline'}>
+                        {component.type === 'frontend' ? '前端' : '后端'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <Button variant="ghost" size="sm" onClick={() => openComponentDialog(component)}>
+                        <Edit className="h-3 w-3" />
+                      </Button>
+                      <Button variant="ghost" size="sm" onClick={() => deleteComponent(component.name)}>
+                        <Trash2 className="h-3 w-3 text-destructive" />
+                      </Button>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
             </TableBody>
           </Table>
           <Button className="mt-4" size="sm" onClick={() => openComponentDialog()}>
