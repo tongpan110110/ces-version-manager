@@ -11,24 +11,22 @@ export async function POST(
     const body = await request.json()
     const { newVersion, newType, newSummary } = body
 
-    // Get source manifest
-    const sourceManifest = await queryOne<any>(
-      `SELECT m.*, p.* FROM manifests m
-       JOIN plans p ON m.plan_id = p.id
-       WHERE m.plan_id = ?`,
+    // Get source plan
+    const sourcePlan = await queryOne<any>(
+      `SELECT * FROM plans WHERE id = ?`,
       [planId]
     )
 
-    if (!sourceManifest) {
+    if (!sourcePlan) {
       return NextResponse.json(
-        { success: false, error: '源交付套件不存在' },
+        { success: false, error: '源计划不存在' },
         { status: 404 }
       )
     }
 
     // Get source components
     const sourceComponents = await query<any>(
-      `SELECT * FROM manifest_components WHERE manifest_id = ?`,
+      `SELECT * FROM plan_components WHERE plan_id = ?`,
       [planId]
     )
 
@@ -50,46 +48,44 @@ export async function POST(
     const versionLine = `${versionParts[0]}.${versionParts[1]}`
 
     // Create new plan
-    const newPlanId = await insert(
+    const newPlanId = Date.now().toString()
+    await insert(
       `INSERT INTO plans (id, version, version_line, type, status, summary, related_requirements, related_bugs)
        VALUES (?, ?, ?, ?, 'draft', ?, ?, ?)`,
       [
-        Date.now().toString(),
+        newPlanId,
         newVersion,
         versionLine,
-        newType,
-        newSummary || `从 ${sourceManifest.version} 复制`,
-        '[]',
-        '[]',
+        newType || sourcePlan.type,
+        newSummary || `从 ${sourcePlan.version} 复制`,
+        sourcePlan.related_requirements || '[]',
+        sourcePlan.related_bugs || '[]',
       ]
-    )
-
-    // Create new manifest
-    await insert(
-      `INSERT INTO manifests (plan_id, frontend_version, frontend_change_type, frontend_change_reason,
-         fe_be_check_status, fe_be_check_message, dependency_check_status, dependency_check_message)
-       VALUES (?, ?, '', '', 'ok', '', 'ok', '')`,
-      [newPlanId, sourceManifest.frontendVersion]
     )
 
     // Copy components
     for (const comp of sourceComponents) {
       await insert(
-        `INSERT INTO manifest_components (manifest_id, component_name, target_version, change_type, change_reason)
-         VALUES (?, ?, ?, 'unchanged', '')`,
-        [newPlanId, comp.component_name, comp.target_version]
+        `INSERT INTO plan_components (plan_id, component_name, component_type, current_version, target_version, enabled)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+        [
+          newPlanId,
+          comp.component_name,
+          comp.component_type,
+          comp.current_version,
+          comp.target_version,
+          comp.enabled,
+        ]
       )
     }
 
-    // Get the complete new manifest
-    const newManifest = await queryOne<any>(
-      `SELECT m.*, p.* FROM manifests m
-       JOIN plans p ON m.plan_id = p.id
-       WHERE m.plan_id = ?`,
+    // Get the complete new plan
+    const newPlan = await queryOne<any>(
+      `SELECT * FROM plans WHERE id = ?`,
       [newPlanId]
     )
 
-    return NextResponse.json({ success: true, data: newManifest })
+    return NextResponse.json({ success: true, data: newPlan })
   } catch (error: any) {
     console.error('Error copying manifest:', error)
     return NextResponse.json(

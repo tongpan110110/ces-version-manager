@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server'
-import { queryOne, insert, update } from '@/lib/db'
+import { queryOne, update } from '@/lib/db'
 
 // PATCH /api/plans/[planId]/status - Update plan status
 export async function PATCH(
@@ -11,7 +11,7 @@ export async function PATCH(
     const body = await request.json()
     const { status } = body
 
-    const validStatuses = ['draft', 'testing', 'ready', 'released', 'deprecated']
+    const validStatuses = ['draft', 'testing', 'ready', 'released', 'upgrading', 'completed', 'deprecated']
     if (!validStatuses.includes(status)) {
       return NextResponse.json(
         { success: false, error: '无效的状态值' },
@@ -40,21 +40,6 @@ export async function PATCH(
     const plan = await queryOne(
       'SELECT * FROM plans WHERE id = ?',
       [planId]
-    )
-
-    // Create audit log
-    await insert(
-      `INSERT INTO audit_logs (entity_type, entity_id, action, field, old_value, new_value, operator, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [
-        'plan',
-        planId,
-        'status_change',
-        'status',
-        existingPlan.status,
-        status,
-        'system'
-      ]
     )
 
     // Convert snake_case to camelCase for response
