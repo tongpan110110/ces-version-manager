@@ -1,18 +1,17 @@
 /**
  * API 调用 Hooks
- * 使用后端 MySQL 数据库，API 失败时降级到 localStorage
+ * 使用后端 MySQL 数据库，API 失败时降级到 init-data.ts 的数据
  */
 
 import { useState, useEffect } from 'react'
-
-// localStorage keys (与 mockData.ts 保持一致)
-const STORAGE_KEYS = {
-  PLANS: 'ces_version_plans',
-  REGIONS: 'ces_version_regions',
-  REGION_VERSIONS: 'ces_version_region_versions',
-  CONFIGS: 'ces_version_configs',
-  COMPONENTS: 'settings_components',
-}
+import {
+  STORAGE_KEYS,
+  INIT_REGIONS,
+  INIT_PLANS,
+  INIT_COMPONENTS,
+  INIT_CONFIGS,
+  initializeLocalStorage
+} from '@/lib/init-data'
 
 // 通用 API 请求函数
 async function apiRequest(url: string, options?: RequestInit) {
@@ -69,9 +68,9 @@ export function useRegions() {
       const result = await apiRequest('/api/regions')
       setRegions(result.data || [])
     } catch (error: any) {
-      console.log('API 获取局点失败，降级到 localStorage:', error.message)
-      // 降级到 localStorage
-      const localRegions = getFromLocalStorage<any[]>(STORAGE_KEYS.REGIONS, [])
+      console.log('API 获取局点失败，降级到 init-data.ts:', error.message)
+      // 降级：先尝试 localStorage，没有则使用 init-data.ts 的数据
+      const localRegions = getFromLocalStorage<any[]>(STORAGE_KEYS.REGIONS, INIT_REGIONS)
       setRegions(localRegions)
     } finally {
       setLoading(false)
@@ -171,9 +170,9 @@ export function usePlans() {
       const result = await apiRequest(url)
       setPlans(result.data || [])
     } catch (error: any) {
-      console.log('API 获取计划失败，降级到 localStorage:', error.message)
-      // 降级到 localStorage
-      const localPlans = getFromLocalStorage<any[]>(STORAGE_KEYS.PLANS, [])
+      console.log('API 获取计划失败，降级到 init-data.ts:', error.message)
+      // 降级：先尝试 localStorage，没有则使用 init-data.ts 的数据
+      const localPlans = getFromLocalStorage<any[]>(STORAGE_KEYS.PLANS, INIT_PLANS)
       // 如果有过滤条件，在本地进行过滤
       let filteredPlans = localPlans
       if (params?.status) {
@@ -291,9 +290,9 @@ export function useConfigs() {
       const result = await apiRequest('/api/config')
       setConfigs(result.data || {})
     } catch (error: any) {
-      console.log('API 获取配置失败，降级到 localStorage:', error.message)
-      // 降级到 localStorage
-      const localConfigs = getFromLocalStorage<Record<string, string>>(STORAGE_KEYS.CONFIGS, {})
+      console.log('API 获取配置失败，降级到 init-data.ts:', error.message)
+      // 降级：先尝试 localStorage，没有则使用 init-data.ts 的数据
+      const localConfigs = getFromLocalStorage<Record<string, string>>(STORAGE_KEYS.CONFIGS, INIT_CONFIGS)
       setConfigs(localConfigs)
     } finally {
       setLoading(false)
@@ -373,13 +372,9 @@ export function useComponents() {
       const result = await apiRequest('/api/components')
       setComponents(result.data || [])
     } catch (error: any) {
-      console.log('API 获取组件失败，降级到 localStorage:', error.message)
-      // 降级到 localStorage
-      const localComponents = getFromLocalStorage<any[]>(STORAGE_KEYS.COMPONENTS, [
-        { name: 'CES-Portal', description: '前端', type: 'frontend' },
-        { name: 'ces-gateway', description: '网关服务', type: 'backend' },
-        { name: 'ces-auth', description: '认证服务', type: 'backend' },
-      ])
+      console.log('API 获取组件失败，降级到 init-data.ts:', error.message)
+      // 降级：先尝试 localStorage，没有则使用 init-data.ts 的数据
+      const localComponents = getFromLocalStorage<any[]>(STORAGE_KEYS.COMPONENTS, INIT_COMPONENTS)
       setComponents(localComponents)
     } finally {
       setLoading(false)
@@ -449,12 +444,11 @@ export function useDashboard() {
       const result = await apiRequest('/api/dashboard')
       setData(result.data)
     } catch (error: any) {
-      console.log('API 获取仪表盘数据失败，降级到 localStorage 计算:', error.message)
+      console.log('API 获取仪表盘数据失败，降级到 init-data.ts 计算:', error.message)
       // 降级到 localStorage - 计算仪表盘数据
-      const plans = getFromLocalStorage<any[]>(STORAGE_KEYS.PLANS, [])
-      const regions = getFromLocalStorage<any[]>(STORAGE_KEYS.REGIONS, [])
-      const regionVersions = getFromLocalStorage<any[]>(STORAGE_KEYS.REGION_VERSIONS, [])
-      const configs = getFromLocalStorage<Record<string, string>>(STORAGE_KEYS.CONFIGS, {})
+      const plans = getFromLocalStorage<any[]>(STORAGE_KEYS.PLANS, INIT_PLANS)
+      const regions = getFromLocalStorage<any[]>(STORAGE_KEYS.REGIONS, INIT_REGIONS)
+      const configs = getFromLocalStorage<Record<string, string>>(STORAGE_KEYS.CONFIGS, INIT_CONFIGS)
 
       // Get active version lines
       const activeVersionLines: string[] = configs['active_version_lines']
@@ -474,14 +468,16 @@ export function useDashboard() {
         const baseline = configs[`baseline_${versionLine}`] || ''
         const baselinePlan = plans.find((p) => p.version === baseline)
 
-        // Get regions on this version line
-        const regionsOnLine = regionVersions.filter((rv) => {
-          const plan = plans.find((p) => p.id === rv.planId)
-          return plan && plan.versionLine === versionLine
+        // Get regions on this version line (based on their backendVersion)
+        const regionsOnLine = regions.filter((r) => {
+          if (!r.backendVersion) return false
+          const parts = r.backendVersion.split('.')
+          const regionVersionLine = parts.length >= 2 ? `${parts[0]}.${parts[1]}` : ''
+          return regionVersionLine === versionLine
         })
 
         const atBaseline = baselinePlan
-          ? regionsOnLine.filter((rv) => rv.planId === baselinePlan.id).length
+          ? regionsOnLine.filter((r) => r.backendVersion === baseline).length
           : 0
         const behindBaseline = regionsOnLine.length - atBaseline
 
@@ -547,9 +543,9 @@ export function usePlan(planId: string) {
       setPlan(result.data)
       setError(null)
     } catch (error: any) {
-      console.log('API 获取计划详情失败，降级到 localStorage:', error.message)
+      console.log('API 获取计划详情失败，降级到 init-data.ts:', error.message)
       // 降级到 localStorage
-      const plans = getFromLocalStorage<any[]>(STORAGE_KEYS.PLANS, [])
+      const plans = getFromLocalStorage<any[]>(STORAGE_KEYS.PLANS, INIT_PLANS)
       const localPlan = plans.find(p => p.id === planId)
       if (localPlan) {
         setPlan(localPlan)

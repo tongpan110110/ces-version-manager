@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
-import { STORAGE_KEYS, initializeLocalStorage } from '@/lib/mockData'
-import { RINGS, generateInitRegions } from '@/lib/init-data'
+import { STORAGE_KEYS, initializeLocalStorage, generateInitRegions } from '@/lib/init-data'
 
 export function useLocalData<T>(key: string, initialValue: T) {
   const [data, setData] = useState<T>(initialValue)
@@ -145,7 +144,6 @@ export function useConfigs() {
 export function useDashboard() {
   const { data: plans } = useLocalData<any[]>(STORAGE_KEYS.PLANS, [])
   const { data: regions } = useLocalData<any[]>(STORAGE_KEYS.REGIONS, [])
-  const { data: regionVersions } = useLocalData<any[]>(STORAGE_KEYS.REGION_VERSIONS, [])
   const { data: configs } = useLocalData<Record<string, string>>(STORAGE_KEYS.CONFIGS, {})
   const [loading, setLoading] = useState(true)
 
@@ -173,14 +171,16 @@ export function useDashboard() {
     const baseline = configs[`baseline_${versionLine}`] || ''
     const baselinePlan = plans.find((p) => p.version === baseline)
 
-    // Get regions on this version line
-    const regionsOnLine = regionVersions.filter((rv) => {
-      const plan = plans.find((p) => p.id === rv.planId)
-      return plan && plan.versionLine === versionLine
+    // Get regions on this version line (based on their backendVersion)
+    const regionsOnLine = regions.filter((r) => {
+      if (!r.backendVersion) return false
+      const parts = r.backendVersion.split('.')
+      const regionVersionLine = parts.length >= 2 ? `${parts[0]}.${parts[1]}` : ''
+      return regionVersionLine === versionLine
     })
 
     const atBaseline = baselinePlan
-      ? regionsOnLine.filter((rv) => rv.planId === baselinePlan.id).length
+      ? regionsOnLine.filter((r) => r.backendVersion === baseline).length
       : 0
     const behindBaseline = regionsOnLine.length - atBaseline
 

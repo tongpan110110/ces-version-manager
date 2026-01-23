@@ -30,6 +30,7 @@ import {
 } from '@/components/ui/dialog'
 import { Upload, Download, Plus, Edit, Trash2, Settings } from 'lucide-react'
 import { useToast } from '@/hooks/use-toast'
+import { INIT_COMPONENTS, INIT_CONFIGS, STORAGE_KEYS } from '@/lib/init-data'
 
 // 类型定义
 interface VersionLine {
@@ -87,10 +88,13 @@ export default function SettingsPage() {
       const saved = localStorage.getItem('settings_versionLines')
       if (saved) return JSON.parse(saved)
     }
-    return [
-      { versionLine: '25.8', baseline: '25.8.2', active: true },
-      { versionLine: '25.10', baseline: '25.10.0', active: true },
-    ]
+    // 从 INIT_CONFIGS 中生成默认版本线
+    const activeVersionLines: string[] = JSON.parse(INIT_CONFIGS.active_version_lines || '["25.8","25.10"]')
+    return activeVersionLines.map(vl => ({
+      versionLine: vl,
+      baseline: (INIT_CONFIGS as Record<string, string>)[`baseline_${vl}`] || '',
+      active: true,
+    }))
   })
 
   const [regions, setRegions] = useState<Region[]>(() => {
@@ -139,17 +143,13 @@ export default function SettingsPage() {
 
     // API 失败，降级到 localStorage
     try {
-      const stored = localStorage.getItem('settings_components')
+      const stored = localStorage.getItem(STORAGE_KEYS.COMPONENTS)
       if (stored) {
         const localComponents = JSON.parse(stored)
         setComponents(localComponents)
       } else {
-        // 如果 localStorage 也没有，使用默认值
-        setComponents([
-          { name: 'CES-Portal', description: '前端', type: 'frontend' },
-          { name: 'ces-gateway', description: '网关服务', type: 'backend' },
-          { name: 'ces-auth', description: '认证服务', type: 'backend' },
-        ])
+        // 如果 localStorage 也没有，使用 init-data.ts 的默认值
+        setComponents(INIT_COMPONENTS as Component[])
       }
     } catch (error) {
       console.error('从 localStorage 读取组件失败:', error)
@@ -161,7 +161,7 @@ export default function SettingsPage() {
 
   // 保存组件（优先 API，失败时保存到 localStorage）
   const saveComponentsToStorage = (newComponents: Component[]) => {
-    localStorage.setItem('settings_components', JSON.stringify(newComponents))
+    localStorage.setItem('STORAGE_KEYS.COMPONENTS', JSON.stringify(newComponents))
   }
 
   if (!mounted) {
