@@ -5,12 +5,12 @@
 
 import { useState, useEffect } from 'react'
 
-// localStorage keys
+// localStorage keys (与 mockData.ts 保持一致)
 const STORAGE_KEYS = {
-  PLANS: 'mock_plans',
-  REGIONS: 'mock_regions',
-  REGION_VERSIONS: 'mock_region_versions',
-  CONFIGS: 'mock_configs',
+  PLANS: 'ces_version_plans',
+  REGIONS: 'ces_version_regions',
+  REGION_VERSIONS: 'ces_version_region_versions',
+  CONFIGS: 'ces_version_configs',
   COMPONENTS: 'settings_components',
 }
 
@@ -71,7 +71,7 @@ export function useRegions() {
     } catch (error: any) {
       console.log('API 获取局点失败，降级到 localStorage:', error.message)
       // 降级到 localStorage
-      const localRegions = getFromLocalStorage<any[]>('settings_regions', [])
+      const localRegions = getFromLocalStorage<any[]>(STORAGE_KEYS.REGIONS, [])
       setRegions(localRegions)
     } finally {
       setLoading(false)
@@ -96,7 +96,7 @@ export function useRegions() {
 
     // 如果 API 失败，保存到 localStorage
     if (!apiSuccess) {
-      saveToLocalStorage('settings_regions', newRegions)
+      saveToLocalStorage(STORAGE_KEYS.REGIONS, newRegions)
     } else {
       await fetchRegions()
     }
@@ -122,7 +122,7 @@ export function useRegions() {
 
     // 如果 API 失败，保存到 localStorage
     if (!apiSuccess) {
-      saveToLocalStorage('settings_regions', newRegions)
+      saveToLocalStorage(STORAGE_KEYS.REGIONS, newRegions)
     } else {
       await fetchRegions()
     }
@@ -145,7 +145,7 @@ export function useRegions() {
 
     // 如果 API 失败，保存到 localStorage
     if (!apiSuccess) {
-      saveToLocalStorage('settings_regions', newRegions)
+      saveToLocalStorage(STORAGE_KEYS.REGIONS, newRegions)
     } else {
       await fetchRegions()
     }
@@ -452,7 +452,7 @@ export function useDashboard() {
       console.log('API 获取仪表盘数据失败，降级到 localStorage 计算:', error.message)
       // 降级到 localStorage - 计算仪表盘数据
       const plans = getFromLocalStorage<any[]>(STORAGE_KEYS.PLANS, [])
-      const regions = getFromLocalStorage<any[]>('settings_regions', [])
+      const regions = getFromLocalStorage<any[]>(STORAGE_KEYS.REGIONS, [])
       const regionVersions = getFromLocalStorage<any[]>(STORAGE_KEYS.REGION_VERSIONS, [])
       const configs = getFromLocalStorage<Record<string, string>>(STORAGE_KEYS.CONFIGS, {})
 
