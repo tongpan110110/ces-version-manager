@@ -1,5 +1,5 @@
-// 模拟数据 - 用于纯前端演示
-import { generateInitRegions } from './init-data'
+// 模拟数据 - 完全使用 init-data.ts 中的配置
+import { generateInitRegions, RINGS, INIT_SYSTEM_CONFIGS } from './init-data'
 
 export const INITIAL_PLANS = [
   {
@@ -64,33 +64,20 @@ export const INITIAL_PLANS = [
   },
 ]
 
+// 使用 init-data.ts 中的 generateInitRegions
 export const INITIAL_REGIONS = generateInitRegions().map((region, index) => ({
   ...region,
   id: String(index + 1),
 }))
 
-export const INITIAL_REGION_VERSIONS = [
-  { regionId: '1', planId: '5', backendReady: true, frontendReady: true }, // 广州友好 -> 25.10.1
-  { regionId: '2', planId: '4', backendReady: true, frontendReady: true }, // 北京四 -> 25.10.0
-  { regionId: '3', planId: '4', backendReady: true, frontendReady: true }, // 广州 -> 25.10.0
-  { regionId: '4', planId: '4', backendReady: true, frontendReady: true }, // 上海一 -> 25.10.0
-  { regionId: '5', planId: '3', backendReady: true, frontendReady: true }, // 华东二 -> 25.8.2
-  { regionId: '6', planId: '3', backendReady: true, frontendReady: true }, // 贵阳一 -> 25.8.2
-  { regionId: '7', planId: '3', backendReady: true, frontendReady: true }, // 香港 -> 25.8.2
-  { regionId: '8', planId: '2', backendReady: true, frontendReady: true }, // 曼谷 -> 25.8.1
-  { regionId: '9', planId: '2', backendReady: true, frontendReady: true }, // 新加坡 -> 25.8.1
-  { regionId: '10', planId: '2', backendReady: true, frontendReady: true }, // 雅加达 -> 25.8.1
-  { regionId: '11', planId: '2', backendReady: true, frontendReady: false }, // 利雅得 -> 25.8.1
-  { regionId: '12', planId: '1', backendReady: true, frontendReady: true }, // 约翰内斯堡 -> 25.8.0
-  { regionId: '13', planId: '2', backendReady: true, frontendReady: true }, // 墨西哥城一 -> 25.8.1
-  { regionId: '14', planId: '2', backendReady: true, frontendReady: true }, // 圣保罗一 -> 25.8.1
-]
+// 使用 init-data.ts 中的 INIT_SYSTEM_CONFIGS
+export const INITIAL_CONFIGS = INIT_SYSTEM_CONFIGS.reduce((acc, config) => {
+  acc[config.key] = config.value
+  return acc
+}, {} as Record<string, string>)
 
-export const INITIAL_CONFIGS = {
-  'baseline_25.8': '25.8.2',
-  'baseline_25.10': '25.10.0',
-  'active_version_lines': JSON.stringify(['25.8', '25.10']),
-}
+// 使用 init-data.ts 中的 RINGS
+export const INITIAL_RINGS = RINGS
 
 // LocalStorage keys
 export const STORAGE_KEYS = {
@@ -98,9 +85,10 @@ export const STORAGE_KEYS = {
   REGIONS: 'ces_version_regions',
   REGION_VERSIONS: 'ces_version_region_versions',
   CONFIGS: 'ces_version_configs',
+  RINGS: 'ces_version_rings',
 }
 
-// Initialize localStorage with mock data
+// Initialize localStorage with init-data.ts 配置
 export function initializeLocalStorage() {
   if (typeof window === 'undefined') return
 
@@ -110,10 +98,10 @@ export function initializeLocalStorage() {
   if (!localStorage.getItem(STORAGE_KEYS.REGIONS)) {
     localStorage.setItem(STORAGE_KEYS.REGIONS, JSON.stringify(INITIAL_REGIONS))
   }
-  if (!localStorage.getItem(STORAGE_KEYS.REGION_VERSIONS)) {
-    localStorage.setItem(STORAGE_KEYS.REGION_VERSIONS, JSON.stringify(INITIAL_REGION_VERSIONS))
-  }
   if (!localStorage.getItem(STORAGE_KEYS.CONFIGS)) {
     localStorage.setItem(STORAGE_KEYS.CONFIGS, JSON.stringify(INITIAL_CONFIGS))
+  }
+  if (!localStorage.getItem(STORAGE_KEYS.RINGS)) {
+    localStorage.setItem(STORAGE_KEYS.RINGS, JSON.stringify(INITIAL_RINGS))
   }
 }
